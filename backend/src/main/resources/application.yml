@@ -1,0 +1,41 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: promptforge
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:chengrongjieyue}
+    username: ${DB_USER:chengrongjieyue}
+    password: ${DB_PASSWORD:chengrongjieyue}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:}
+    access-ttl-minutes: 120
+    refresh-ttl-days: 7
+  crypto:
+    key: ${ENCRYPT_KEY:}
+  admin:
+    username: ${ADMIN_USERNAME:admin}
+    password: ${ADMIN_PASSWORD:}
+  llm:
+    timeout-seconds: 120
+  rate-limit:
+    llm-per-minute: 10
+    login-max-failures: 5
+    login-lock-minutes: 15

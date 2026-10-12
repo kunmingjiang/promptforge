@@ -1,0 +1,251 @@
+/* ============================================================
+   铸语 PromptForge · 设计系统（天空蓝渐变 · 浅色科技风）
+   浅色天空蓝渐变底 + 白色毛玻璃卡片；蓝色发丝线；
+   字号整体加大（基准 16px）；动效只用于传达状态。
+   ============================================================ */
+:root {
+  /* 天空蓝分层表面 */
+  --bg: #e3effc;
+  --surface-1: #ffffff;
+  --surface-2: #f2f8ff;
+  --surface-3: #e3f0fd;
+  /* 蓝色发丝线 */
+  --line: rgba(37, 99, 235, 0.16);
+  --line-strong: rgba(37, 99, 235, 0.34);
+  /* 文字：深海军蓝系 */
+  --text-1: #0e2a4d;
+  --text-2: #33517c;
+  --text-3: #6d88ab;
+  /* 强调色：天空蓝 + 交互蓝 */
+  --accent: #0ea5e9;
+  --accent-dim: rgba(14, 165, 233, 0.12);
+  --interactive: #2563eb;
+
+  --radius: 14px;
+  --radius-sm: 9px;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, 'Courier New', monospace;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Element Plus 浅色主题对齐 */
+  --el-color-primary: #2563eb;
+  --el-color-primary-light-3: #5c8cf0;
+  --el-color-primary-light-5: #92b3f6;
+  --el-color-primary-light-7: #c3d6fa;
+  --el-color-primary-light-8: #dbe6fb;
+  --el-color-primary-light-9: #eef3fd;
+  --el-color-primary-dark-2: #1d4fd8;
+  --el-border-radius-base: 9px;
+  --el-font-size-base: 16px;
+  --el-font-size-small: 14px;
+  --el-font-size-extra-small: 13px;
+  --el-font-size-medium: 17px;
+  --el-font-size-large: 19px;
+  --el-text-color-primary: var(--text-1);
+  --el-text-color-regular: var(--text-2);
+  --el-text-color-secondary: var(--text-3);
+  --el-border-color: var(--line-strong);
+  --el-border-color-light: var(--line);
+  --el-border-color-lighter: var(--line);
+  --el-fill-color-light: var(--surface-2);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  font-family: -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-size: 16px;
+  background:
+    radial-gradient(ellipse 1200px 640px at 86% -12%, rgba(255, 255, 255, 0.95), transparent 62%),
+    radial-gradient(ellipse 920px 540px at -6% 112%, rgba(56, 189, 248, 0.22), transparent 60%),
+    linear-gradient(rgba(37, 99, 235, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.045) 1px, transparent 1px),
+    linear-gradient(168deg, #eef6ff 0%, #dcedfd 42%, #cbe5fb 100%);
+  background-size: auto, auto, 46px 46px, 46px 46px, auto;
+  background-attachment: fixed;
+  color: var(--text-1);
+}
+
+/* 细颗粒噪点：消除大面积渐变的「数码平」感 */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---------- 卡片：白色毛玻璃 + 蓝调分层阴影 ---------- */
+.page-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 26px;
+  box-shadow: 0 1px 2px rgba(30, 80, 160, 0.05), 0 12px 32px rgba(30, 90, 180, 0.1);
+}
+
+/* ---------- 面板标题：等宽微标签 ---------- */
+.panel-title {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+  color: var(--text-2);
+  margin: 0 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel-title::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(14, 165, 233, 0.55);
+  flex-shrink: 0;
+}
+
+/* ---------- 流式输出：浅色科技终端 ---------- */
+.stream-output {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.8;
+  min-height: 300px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 18px 20px;
+  background: #f6fbff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 15.5px;
+  font-family: var(--font-mono);
+  color: #16324f;
+  box-shadow: inset 0 0 40px rgba(37, 99, 235, 0.05);
+}
+
+/* ---------- Markdown ---------- */
+.markdown-body {
+  color: var(--text-1);
+  line-height: 1.85;
+  font-size: 16px;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  margin: 20px 0 10px;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.markdown-body h1 {
+  font-size: 24px;
+}
+.markdown-body h2 {
+  font-size: 20px;
+}
+.markdown-body h3 {
+  font-size: 17.5px;
+}
+.markdown-body code {
+  background: var(--accent-dim);
+  color: #0277bd;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.markdown-body pre {
+  background: #f6fbff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  overflow-x: auto;
+}
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+  color: #16324f;
+}
+.markdown-body blockquote {
+  border-left: 2px solid var(--accent);
+  margin: 10px 0;
+  padding: 2px 14px;
+  color: var(--text-2);
+}
+.markdown-body a {
+  color: var(--interactive);
+  text-decoration: none;
+}
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--line);
+  padding: 7px 12px;
+  font-size: 15px;
+}
+.markdown-body th {
+  background: rgba(37, 99, 235, 0.07);
+}
+
+/* ---------- 滚动条 ---------- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(37, 99, 235, 0.24);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(37, 99, 235, 0.42);
+}
+
+/* ---------- 通用 ---------- */
+.cursor {
+  animation: blink 0.9s steps(1) infinite;
+  color: var(--accent);
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 等宽微标签（卡片角标、分类标记） */
+.mono-tag {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+
+/* 主按钮：天空蓝交互色 */
+.el-button--primary {
+  --el-button-hover-bg-color: #5c8cf0;
+  --el-button-active-bg-color: #1d4fd8;
+  background-color: var(--interactive);
+  border-color: transparent;
+  transition: background-color 0.18s var(--ease);
+}
