@@ -1,28 +1,36 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
+import { setLocale } from '../i18n'
 import BrandLogo from '../components/BrandLogo.vue'
 import BrandFooter from '../components/BrandFooter.vue'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const { t, locale } = useI18n()
 
 const menus = [
-  { path: '/', label: '首页', icon: 'HomeFilled' },
-  { path: '/prompt', label: '提示词生成', icon: 'MagicStick' },
-  { path: '/requirement', label: '需求助手', icon: 'Document' },
-  { path: '/history', label: '对话历史', icon: 'Clock' }
+  { path: '/', labelKey: 'menu.home', icon: 'HomeFilled' },
+  { path: '/prompt', labelKey: 'menu.prompt', icon: 'MagicStick' },
+  { path: '/requirement', labelKey: 'menu.requirement', icon: 'Document' },
+  { path: '/history', labelKey: 'menu.history', icon: 'Clock' }
 ]
 
 const adminMenus = [
-  { path: '/admin/config', label: '模型配置', icon: 'Setting' },
-  { path: '/admin/stats', label: '使用统计', icon: 'DataAnalysis' }
+  { path: '/admin/config', labelKey: 'menu.adminConfig', icon: 'Setting' },
+  { path: '/admin/stats', labelKey: 'menu.adminStats', icon: 'DataAnalysis' }
 ]
 
 function onLogout() {
   auth.logout()
   router.push('/login')
+}
+
+function onLocaleChange(l: string) {
+  setLocale(l as 'zh' | 'en')
+  locale.value = l
 }
 </script>
 
@@ -30,19 +38,19 @@ function onLogout() {
   <el-container class="layout">
     <el-aside width="216px" class="aside">
       <BrandLogo />
-      <div class="nav-label">工作台</div>
+      <div class="nav-label">{{ t('menu.workspace') }}</div>
       <el-menu router :default-active="route.path" class="menu">
         <el-menu-item v-for="m in menus" :key="m.path" :index="m.path">
           <el-icon><component :is="m.icon" /></el-icon>
-          <span>{{ m.label }}</span>
+          <span>{{ t(m.labelKey) }}</span>
         </el-menu-item>
       </el-menu>
       <template v-if="auth.isAdmin">
-        <div class="nav-label">管理</div>
+        <div class="nav-label">{{ t('menu.admin') }}</div>
         <el-menu router :default-active="route.path" class="menu">
           <el-menu-item v-for="m in adminMenus" :key="m.path" :index="m.path">
             <el-icon><component :is="m.icon" /></el-icon>
-            <span>{{ m.label }}</span>
+            <span>{{ t(m.labelKey) }}</span>
           </el-menu-item>
         </el-menu>
       </template>
@@ -53,18 +61,32 @@ function onLogout() {
     </el-aside>
     <el-container class="body-col">
       <el-header class="header" height="52px">
-        <span class="crumb mono-tag">{{ route.meta?.title || 'PROMPTFORGE' }}</span>
-        <el-dropdown>
-          <span class="user-name">
-            <span class="avatar">{{ (auth.user?.username || 'U').slice(0, 1).toUpperCase() }}</span>
-            {{ auth.user?.username || '用户' }}
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item @click="onLogout">退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <span class="crumb mono-tag">{{ route.meta?.title ? t(route.meta.title as string) : 'PROMPTFORGE' }}</span>
+        <div class="header-right">
+          <el-dropdown trigger="click" @command="onLocaleChange">
+            <span class="lang-switch">
+              {{ t('layout.langName') }}
+              <el-icon><component :is="'ArrowDown'" /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="zh" :disabled="locale === 'zh'">简体中文</el-dropdown-item>
+                <el-dropdown-item command="en" :disabled="locale === 'en'">English</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <el-dropdown>
+            <span class="user-name">
+              <span class="avatar">{{ (auth.user?.username || 'U').slice(0, 1).toUpperCase() }}</span>
+              {{ auth.user?.username || t('layout.userDefault') }}
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="onLogout">{{ t('layout.logout') }}</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </el-header>
       <el-main class="main">
         <router-view />
@@ -153,6 +175,26 @@ function onLogout() {
 .crumb {
   letter-spacing: 2px;
   font-size: 12.5px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.lang-switch {
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: 13.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.18s var(--ease);
+}
+
+.lang-switch:hover {
+  color: var(--text-1);
 }
 
 .user-name {

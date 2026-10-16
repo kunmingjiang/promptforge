@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { getModelConfig, testModelConfig, updateModelConfig } from '../../api'
 import { PROVIDERS, providerOptions } from '../../providers'
 import type { ModelConfig, ModelConfigTestResult } from '../types'
+
+const { t } = useI18n()
 
 const form = reactive({
   provider: 'deepseek',
@@ -41,7 +44,7 @@ onMounted(async () => {
 
 async function onSave() {
   if (!form.baseUrl.trim() || !form.modelName.trim()) {
-    ElMessage.warning('请填写 Base URL 与模型名')
+    ElMessage.warning(t('admin.warnFillBaseUrlModel'))
     return
   }
   saving.value = true
@@ -53,7 +56,7 @@ async function onSave() {
       modelName: form.modelName,
       enabled: form.enabled
     })
-    ElMessage.success('配置已保存，API Key 已加密存储')
+    ElMessage.success(t('admin.savedEncrypted'))
     const result: any = await getModelConfig()
     masked.value = (result.data as ModelConfig)?.apiKeyMasked || ''
     form.apiKey = ''
@@ -64,7 +67,7 @@ async function onSave() {
 
 async function onTest() {
   if (!form.apiKey.trim()) {
-    ElMessage.warning('测试连接需要输入 API Key')
+    ElMessage.warning(t('admin.warnNeedKeyForTest'))
     return
   }
   testing.value = true
@@ -78,9 +81,9 @@ async function onTest() {
     })
     testResult.value = result.data as ModelConfigTestResult
     if (testResult.value?.success) {
-      ElMessage.success(`连接成功，耗时 ${testResult.value.latencyMs}ms`)
+      ElMessage.success(t('admin.connSuccess', { ms: testResult.value.latencyMs }))
     } else {
-      ElMessage.error(testResult.value?.message || '连接失败')
+      ElMessage.error(testResult.value?.message || t('admin.connFailed'))
     }
   } finally {
     testing.value = false
@@ -91,42 +94,47 @@ async function onTest() {
 <template>
   <div class="admin-page">
     <div class="page-card" style="max-width: 640px">
-      <h3 class="panel-title">模型配置</h3>
+      <h3 class="panel-title">{{ t('admin.configTitle') }}</h3>
       <el-alert
         type="info"
         :closable="false"
         show-icon
-        title="支持 DeepSeek / 智谱 GLM / Kimi / MiniMax 及任意 OpenAI 兼容网关。API Key 使用 AES-256 加密存储，保存后仅显示末 4 位；更换 Key 时重新填写即可。"
+        :title="t('admin.configAlert')"
         style="margin-bottom: 16px"
       />
 
       <el-form label-position="top">
-        <el-form-item label="模型提供商" required>
+        <el-form-item :label="t('admin.provider')" required>
           <el-select v-model="form.provider" style="width: 100%">
-            <el-option v-for="p in providerOptions" :key="p.key" :label="p.label" :value="p.key" />
+            <el-option
+              v-for="p in providerOptions"
+              :key="p.key"
+              :label="p.key === 'custom' ? t('providers.custom.label') : p.label"
+              :value="p.key"
+            />
           </el-select>
         </el-form-item>
-        <el-form-item label="Base URL" required>
+        <el-form-item :label="t('admin.baseUrl')" required>
           <el-input v-model="form.baseUrl" :placeholder="preset.baseUrl || 'https://your-gateway.example.com/v1'" />
         </el-form-item>
-        <el-form-item label="模型名" required>
-          <el-input v-model="form.modelName" :placeholder="preset.model || '例如 gpt-4o / qwen-max'" />
+        <el-form-item :label="t('admin.modelName')" required>
+          <el-input v-model="form.modelName" :placeholder="preset.model || t('admin.modelPlaceholder')" />
         </el-form-item>
-        <el-form-item :label="masked ? `API Key（已保存：${masked}）` : 'API Key'">
+        <el-form-item :label="masked ? t('admin.apiKeySaved', { masked }) : t('admin.apiKey')">
           <el-input
             v-model="form.apiKey"
             type="password"
             show-password
-            :placeholder="masked ? '留空则保留原 Key' : (preset.siteName ? `在 ${preset.siteName} 创建的 Key` : 'sk-...')"
+            :placeholder="masked ? t('admin.keyKeepOriginal') : (preset.siteName ? t('admin.keyCreatedAt', { site: preset.siteName }) : 'sk-...')"
           />
         </el-form-item>
-        <el-form-item label="启用">
+        <el-form-item :label="t('admin.enabled')">
           <el-switch v-model="form.enabled" />
         </el-form-item>
 
         <div class="actions">
-          <el-button :loading="testing" @click="onTest">测试连接</el-button>
-          <el-button type="primary" :loading="saving" @click="onSave">保存配置</el-button>
+          <el-button :loading="testing" @click="onTest">{{ t('admin.testConn') }}</el-button>
+          <el-button type="primary" :loading="saving" @click="onSave">{{ t('admin.saveConfig') }}</el-button>
         </div>
       </el-form>
 
@@ -134,7 +142,7 @@ async function onTest() {
         v-if="testResult"
         :type="testResult.success ? 'success' : 'error'"
         :title="testResult.message"
-        :description="`耗时 ${testResult.latencyMs}ms`"
+        :description="t('admin.latency', { ms: testResult.latencyMs })"
         :closable="false"
         show-icon
         style="margin-top: 8px"

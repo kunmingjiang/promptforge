@@ -1,27 +1,15 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 const entries = [
-  {
-    path: '/prompt',
-    title: '提示词生成',
-    desc: '输入一句需求，生成结构化、可直接复用的高质量提示词',
-    icon: 'MagicStick',
-    tag: 'SINGLE-STEP',
-    num: '01'
-  },
-  {
-    path: '/requirement',
-    title: '需求助手',
-    desc: '提交原始需求，AI 追问澄清问题，生成 Markdown 需求文档',
-    icon: 'Document',
-    tag: 'MULTI-STEP',
-    num: '02'
-  }
+  { path: '/prompt', titleKey: 'home.entry1Title', descKey: 'home.entry1Desc', icon: 'MagicStick', tag: 'SINGLE-STEP', num: '01' },
+  { path: '/requirement', titleKey: 'home.entry2Title', descKey: 'home.entry2Desc', icon: 'Document', tag: 'MULTI-STEP', num: '02' }
 ]
 </script>
 
@@ -30,10 +18,10 @@ const entries = [
     <div class="hero">
       <span class="mono-tag hero-tag">WORKSPACE</span>
       <h1 class="hero-title">
-        你好，{{ auth.user?.username || '' }}。
-        <br />今天要把<span class="accent">什么想法</span>交给 AI？
+        {{ t('home.hello', { name: auth.user?.username || '' }) }}
+        <br />{{ t('home.heroPre') }}<span class="accent">{{ t('home.heroAccent') }}</span>{{ t('home.heroPost') }}
       </h1>
-      <p class="hero-desc">选择一个入口开始，所有生成内容都会自动保存到「对话历史」，可随时回看。</p>
+      <p class="hero-desc">{{ t('home.heroDesc') }}</p>
     </div>
 
     <div class="entries">
@@ -47,9 +35,9 @@ const entries = [
             <component :is="entry.icon" />
           </el-icon>
         </div>
-        <h3 class="entry-title">{{ entry.title }}</h3>
-        <p class="entry-desc">{{ entry.desc }}</p>
-        <span class="entry-go">开始使用
+        <h3 class="entry-title">{{ t(entry.titleKey) }}</h3>
+        <p class="entry-desc">{{ t(entry.descKey) }}</p>
+        <span class="entry-go">{{ t('home.startUsing') }}
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
             <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>

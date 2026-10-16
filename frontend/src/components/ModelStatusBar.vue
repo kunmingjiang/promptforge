@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { getModelConfig, getModelStatus, testModelConfig, updateModelConfig } from '../api'
 import { useAuthStore } from '../stores/auth'
@@ -8,13 +9,14 @@ import type { ModelConfig, ModelConfigTestResult, ModelStatus } from '../types'
 
 /**
  * 模型状态条 + 就地配置弹框（多供应商）：
- * - 供应商可切换：DeepSeek / 智谱 GLM / Kimi / MiniMax / 自定义（OpenAI 兼容）
- * - 选择供应商自动填充 Base URL 与默认模型名，教程按供应商动态切换
+ * - 供应商可切换：DeepSeek / 智谱 GLM / Kimi / MiniMax / OpenAI / Claude / Gemini / 自定义（OpenAI 兼容）
+ * - 选择供应商自动填充 Base URL 与默认模型名，教程按供应商从 i18n 动态读取
  * - 状态就绪：显示「供应商 · 模型名 · 就绪」，点击可查看/修改
  * - 未配置：显示警示态，点生成时自动弹出配置框
  */
 const props = defineProps<{ autoOpen?: boolean }>()
 const auth = useAuthStore()
+const { t, tm } = useI18n()
 
 const status = ref<ModelStatus | null>(null)
 const dialogVisible = ref(false)
@@ -37,11 +39,20 @@ const preset = computed(() => PROVIDERS[form.provider] || PROVIDERS.custom)
 const ready = computed(() => !!status.value?.configured)
 const statusText = computed(() => {
   if (ready.value) {
-    const providerLabel = PROVIDERS[status.value?.provider || '']?.label || status.value?.provider
-    return `${providerLabel} · ${status.value?.modelName || ''} · 就绪`
+    const key = status.value?.provider || ''
+    const providerLabel = key === 'custom' ? t('providers.custom.label') : (PROVIDERS[key]?.label || status.value?.provider)
+    return t('status.statusReady', { provider: providerLabel, model: status.value?.modelName || '' })
   }
-  return '模型未配置'
+  return t('status.notConfigured')
 })
+
+/** 当前供应商的教程（steps / tips 从 i18n 读取，随语言切换；数组消息须用 tm()） */
+const guideSteps = computed<{ t: string; d: string }[]>(() =>
+  preset.value.hasGuide ? ((tm('providers.' + form.provider + '.steps') || []) as unknown as { t: string; d: string }[]) : []
+)
+const guideTips = computed<string[]>(() =>
+  preset.value.hasGuide ? ((tm('providers.' + form.provider + '.tips') || []) as unknown as string[]) : []
+)
 
 /** 切换供应商：自动填充该家的 Base URL 与默认模型名 */
 watch(() => form.provider, (key) => {
@@ -96,11 +107,11 @@ async function ensureReady(): Promise<boolean> {
 
 async function onSave() {
   if (!form.baseUrl.trim() || !form.modelName.trim()) {
-    ElMessage.warning('请填写 Base URL 与模型名')
+    ElMessage.warning(t('status.warnFillBaseUrlModel'))
     return
   }
   if (!masked.value && !form.apiKey.trim()) {
-    ElMessage.warning('首次配置需要填写 API Key')
+    ElMessage.warning(t('status.warnNeedApiKeyFirst'))
     return
   }
   saving.value = true
@@ -112,7 +123,7 @@ async function onSave() {
       modelName: form.modelName,
       enabled: form.enabled
     })
-    ElMessage.success('模型配置已保存，API Key 已加密存储')
+    ElMessage.success(t('status.savedEncrypted'))
     masked.value = '****'
     loadedAdminConfig.value = true
     form.apiKey = ''
@@ -125,7 +136,7 @@ async function onSave() {
 
 async function onTest() {
   if (!form.apiKey.trim()) {
-    ElMessage.warning('测试连接需要输入 API Key（已保存的 Key 出于安全不回显，重新粘贴一次即可）')
+    ElMessage.warning(t('status.warnNeedKeyForTest'))
     return
   }
   testing.value = true
@@ -139,9 +150,9 @@ async function onTest() {
     })
     testResult.value = result.data as ModelConfigTestResult
     if (testResult.value?.success) {
-      ElMessage.success(`连接成功，耗时 ${testResult.value.latencyMs}ms`)
+      ElMessage.success(t('status.connSuccess', { ms: testResult.value.latencyMs }))
     } else {
-      ElMessage.error(testResult.value?.message || '连接失败')
+      ElMessage.error(testResult.value?.message || t('status.connFailed'))
     }
   } finally {
     testing.value = false
@@ -158,24 +169,24 @@ refresh()
   <button class="model-chip" :class="{ ready }" type="button" @click="open">
     <span class="chip-dot"></span>
     <span class="chip-text">{{ statusText }}</span>
-    <span class="chip-action">{{ ready ? '管理' : '去配置' }}</span>
+    <span class="chip-action">{{ ready ? t('status.manage') : t('status.goConfig') }}</span>
   </button>
 
   <!-- 就地配置弹框 -->
-  <el-dialog v-model="dialogVisible" title="模型配置" width="600px" append-to-body>
+  <el-dialog v-model="dialogVisible" :title="t('status.dialogTitle')" width="600px" append-to-body>
     <el-alert
       v-if="status && !status.configured"
       type="warning"
       :closable="false"
       show-icon
-      :title="status.message || '模型尚未配置，配置完成后即可开始生成'"
+      :title="status.message || t('status.notConfiguredAlert')"
       style="margin-bottom: 16px"
     />
 
     <!-- 管理员：可编辑表单 -->
     <template v-if="auth.isAdmin">
       <el-form label-position="top" v-loading="loading">
-        <el-form-item label="模型提供商" required>
+        <el-form-item :label="t('admin.provider')" required>
           <div class="provider-grid">
             <button
               v-for="p in providerOptions"
@@ -184,36 +195,36 @@ refresh()
               class="provider-item"
               :class="{ active: form.provider === p.key }"
               @click="form.provider = p.key"
-            >{{ p.label }}</button>
+            >{{ p.key === 'custom' ? t('providers.custom.label') : p.label }}</button>
           </div>
         </el-form-item>
-        <el-form-item label="Base URL" required>
+        <el-form-item :label="t('admin.baseUrl')" required>
           <el-input v-model="form.baseUrl" :placeholder="preset.baseUrl || 'https://your-gateway.example.com/v1'" />
         </el-form-item>
-        <el-form-item :label="masked ? `API Key（已保存：${masked}）` : 'API Key'" required>
+        <el-form-item :label="masked ? t('admin.apiKeySaved', { masked }) : t('admin.apiKey')" required>
           <el-input
             v-model="form.apiKey"
             type="password"
             show-password
-            :placeholder="masked ? '留空则保留原 Key' : (preset.siteName ? `在 ${preset.siteName} 创建的 Key` : 'sk-...')"
+            :placeholder="masked ? t('admin.keyKeepOriginal') : (preset.siteName ? t('admin.keyCreatedAt', { site: preset.siteName }) : 'sk-...')"
           />
         </el-form-item>
-        <el-form-item label="模型名" required>
-          <el-input v-model="form.modelName" :placeholder="preset.model || '例如 gpt-4o / qwen-max'" />
+        <el-form-item :label="t('admin.modelName')" required>
+          <el-input v-model="form.modelName" :placeholder="preset.model || t('admin.modelPlaceholder')" />
         </el-form-item>
-        <el-form-item label="启用">
+        <el-form-item :label="t('admin.enabled')">
           <el-switch v-model="form.enabled" />
         </el-form-item>
         <div class="dialog-actions">
-          <el-button :loading="testing" @click="onTest">测试连接</el-button>
-          <el-button type="primary" :loading="saving" @click="onSave">保存配置</el-button>
+          <el-button :loading="testing" @click="onTest">{{ t('admin.testConn') }}</el-button>
+          <el-button type="primary" :loading="saving" @click="onSave">{{ t('admin.saveConfig') }}</el-button>
         </div>
       </el-form>
       <el-alert
         v-if="testResult"
         :type="testResult.success ? 'success' : 'error'"
         :title="testResult.message"
-        :description="`耗时 ${testResult.latencyMs}ms`"
+        :description="t('admin.latency', { ms: testResult.latencyMs })"
         :closable="false"
         show-icon
         style="margin-top: 8px"
@@ -226,27 +237,27 @@ refresh()
         type="info"
         :closable="false"
         show-icon
-        title="模型配置由管理员统一管理"
-        description="请联系管理员在「管理后台 → 模型配置」中完成配置；如果你自己就是管理员，用管理员账号登录后即可在此直接填写。"
+        :title="t('status.userAlertTitle')"
+        :description="t('status.userAlertDesc')"
         style="margin-bottom: 16px"
       />
     </template>
 
-    <!-- 获取 Key 引导（按所选供应商动态切换） -->
-    <el-collapse v-if="preset.steps.length" class="guide">
-      <el-collapse-item :title="`不知道怎么获取 ${preset.label} 的 API Key？看这里（3 步搞定）`" name="guide">
+    <!-- 获取 Key 引导（按所选供应商动态切换，文案走 i18n） -->
+    <el-collapse v-if="preset.hasGuide" class="guide">
+      <el-collapse-item :title="t('status.guideTitle', { provider: preset.label })" name="guide">
         <ol class="guide-steps">
-          <li v-for="[t, d] in preset.steps" :key="t">
-            <b>{{ t }}</b>：{{ d }}
+          <li v-for="s in guideSteps" :key="s.t">
+            <b>{{ s.t }}</b>：{{ s.d }}
           </li>
         </ol>
         <div class="guide-tips">
-          <div v-for="tip in preset.tips" :key="tip">· {{ tip }}</div>
-          <div>· Base URL 填 <code>{{ preset.baseUrl }}</code></div>
-          <div>· Key 只保存在你自己的服务器里（AES-256 加密），不会上传任何第三方</div>
+          <div v-for="tip in guideTips" :key="tip">· {{ tip }}</div>
+          <div>· {{ t('status.baseUrlTip', { url: preset.baseUrl }) }}</div>
+          <div>· {{ t('status.keySafeTip') }}</div>
         </div>
         <el-button size="small" tag="a" :href="preset.site" target="_blank" rel="noopener">
-          打开 {{ preset.siteName }} ↗
+          {{ t('status.openSite', { site: preset.siteName }) }}
         </el-button>
       </el-collapse-item>
     </el-collapse>

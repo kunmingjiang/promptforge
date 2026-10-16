@@ -33,7 +33,7 @@ Two entry points, one prompt-processing core:
 
 ### Highlights
 
-- 🔌 **Multi-provider LLM** — DeepSeek / Zhipu GLM / Kimi (Moonshot) / MiniMax / any OpenAI-compatible gateway (OneAPI, NewAPI, vLLM…). Switch from the admin panel; zero business-code changes
+- 🔌 **Multi-provider LLM** — DeepSeek / Zhipu GLM / Kimi (Moonshot) / MiniMax / OpenAI / Claude / Gemini / any OpenAI-compatible gateway (OneAPI, NewAPI, vLLM…). Switch from the admin panel; zero business-code changes
 - 🔐 **Enterprise-grade security** — API keys encrypted at rest with AES-256-GCM (only the last 4 chars echoed back), BCrypt passwords, dual JWT tokens, login lockout, per-user rate limiting, full audit logging
 - ⚡ **Streaming UX** — token-by-token SSE output; Nginx buffering pre-configured off
 - 🕘 **Version history** — every generation is snapshotted; compare and roll back anytime
@@ -85,6 +85,9 @@ flowchart LR
 | Zhipu GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-4.5` | [open.bigmodel.cn](https://open.bigmodel.cn) |
 | Kimi (Moonshot) | `https://api.moonshot.cn/v1` | `kimi-k2-0905-preview` | [platform.moonshot.cn](https://platform.moonshot.cn) |
 | MiniMax | `https://api.minimax.chat/v1` | `MiniMax-Text-01` | [platform.minimaxi.com](https://platform.minimaxi.com) |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o` | [platform.openai.com](https://platform.openai.com) |
+| Claude (Anthropic) | `https://api.anthropic.com/v1` | `claude-sonnet-4-5` | [console.anthropic.com](https://console.anthropic.com) |
+| Gemini (Google) | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` | [aistudio.google.com](https://aistudio.google.com) |
 | Custom | Any OpenAI-compatible gateway | Your choice | OneAPI / NewAPI / vLLM / self-hosted |
 
 > Switching providers is a dropdown selection in the admin panel — Base URL and default model auto-fill. Each provider ships with a built-in 3-step "get your API key" guide.

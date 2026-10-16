@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import { streamSse } from '../utils/sse'
@@ -7,6 +8,7 @@ import { createProject, getDocument, getQuestions, submitAnswers } from '../api'
 import type { Question } from '../types'
 import ModelStatusBar from '../components/ModelStatusBar.vue'
 
+const { t } = useI18n()
 const modelBar = ref<InstanceType<typeof ModelStatusBar>>()
 
 const step = ref(0)
@@ -24,12 +26,12 @@ const renderedDoc = computed(() => (docContent.value ? marked.parse(docContent.v
 
 async function onCreate() {
   if (!title.value.trim() || !raw.value.trim()) {
-    ElMessage.warning('请填写项目标题和原始需求')
+    ElMessage.warning(t('requirement.warnFillTitleRaw'))
     return
   }
   // 模型未配置时当场弹出配置引导
   if (modelBar.value && !(await modelBar.value.ensureReady())) {
-    ElMessage.warning('请先完成模型配置')
+    ElMessage.warning(t('requirement.warnConfigFirst'))
     return
   }
   loading.value = true
@@ -64,7 +66,7 @@ async function onSubmitAnswers() {
 async function onGenerateDoc() {
   if (!projectId.value || generating.value) return
   if (modelBar.value && !(await modelBar.value.ensureReady())) {
-    ElMessage.warning('请先完成模型配置')
+    ElMessage.warning(t('requirement.warnConfigFirst'))
     return
   }
   generating.value = true
@@ -78,7 +80,7 @@ async function onGenerateDoc() {
       const detail: any = await getDocument(projectId.value!)
       docVersion.value = detail.data.version
       versions.value = detail.data.versions
-      ElMessage.success('需求文档已生成并保存版本')
+      ElMessage.success(t('requirement.docGenerated'))
     },
     onError: (message) => {
       ElMessage.error(message)
@@ -111,39 +113,39 @@ const answerState = reactive({})
   <div class="req-page">
     <div class="page-card steps-card">
       <el-steps :active="step" align-center finish-status="success">
-        <el-step title="提交需求" />
-        <el-step title="澄清问答" />
-        <el-step title="生成文档" />
+        <el-step :title="t('requirement.stepSubmit')" />
+        <el-step :title="t('requirement.stepQa')" />
+        <el-step :title="t('requirement.stepDoc')" />
       </el-steps>
     </div>
 
     <!-- 第 1 步：提交需求 -->
     <div v-if="step === 0" class="page-card">
       <div class="card-head">
-        <h3 class="panel-title">需求信息</h3>
+        <h3 class="panel-title">{{ t('requirement.infoTitle') }}</h3>
         <ModelStatusBar ref="modelBar" />
       </div>
       <el-form label-position="top">
-        <el-form-item label="项目标题" required>
-          <el-input v-model="title" maxlength="64" show-word-limit placeholder="例如：停车缴费小程序" />
+        <el-form-item :label="t('requirement.projectTitle')" required>
+          <el-input v-model="title" maxlength="64" show-word-limit :placeholder="t('requirement.titlePlaceholder')" />
         </el-form-item>
-        <el-form-item label="原始需求" required>
+        <el-form-item :label="t('requirement.rawRequirement')" required>
           <el-input
             v-model="raw"
             type="textarea"
             :rows="8"
             maxlength="8000"
             show-word-limit
-            placeholder="用大白话描述你想做的东西，AI 会帮你追问关键细节"
+            :placeholder="t('requirement.rawPlaceholder')"
           />
         </el-form-item>
-        <el-button type="primary" :loading="loading" @click="onCreate">生成澄清问题</el-button>
+        <el-button type="primary" :loading="loading" @click="onCreate">{{ t('requirement.genQuestions') }}</el-button>
       </el-form>
     </div>
 
     <!-- 第 2 步：澄清问答 -->
     <div v-else-if="step === 1" class="page-card">
-      <h3 class="panel-title">AI 需要澄清 {{ questions.length }} 个问题（最多 5 个，可跳过）</h3>
+      <h3 class="panel-title">{{ t('requirement.qaTitle', { n: questions.length }) }}</h3>
       <div v-for="(q, index) in questions" :key="q.id" class="question-item">
         <div class="question-label">{{ index + 1 }}. {{ q.question }}</div>
         <el-input
@@ -151,20 +153,20 @@ const answerState = reactive({})
           type="textarea"
           :rows="2"
           :disabled="q.skipped"
-          placeholder="填写你的回答"
+          :placeholder="t('requirement.answerPlaceholder')"
         />
-        <el-checkbox v-model="q.skipped" class="skip-check">跳过此问题</el-checkbox>
+        <el-checkbox v-model="q.skipped" class="skip-check">{{ t('requirement.skipQuestion') }}</el-checkbox>
       </div>
       <div class="actions">
-        <el-button type="primary" :loading="loading" @click="onSubmitAnswers">提交回答</el-button>
-        <el-button @click="reset">重新开始</el-button>
+        <el-button type="primary" :loading="loading" @click="onSubmitAnswers">{{ t('requirement.submitAnswers') }}</el-button>
+        <el-button @click="reset">{{ t('requirement.restart') }}</el-button>
       </div>
     </div>
 
     <!-- 第 3 步：文档预览 -->
     <div v-else class="doc-layout">
       <div class="page-card doc-side">
-        <h3 class="panel-title">需求文档</h3>
+        <h3 class="panel-title">{{ t('requirement.docTitle') }}</h3>
         <el-select
           v-if="versions.length"
           :model-value="docVersion"
@@ -185,13 +187,13 @@ const answerState = reactive({})
           :disabled="generating"
           @click="onGenerateDoc"
         >
-          {{ docContent ? '重新生成文档' : '生成需求文档' }}
+          {{ docContent ? t('requirement.regenDoc') : t('requirement.genDoc') }}
         </el-button>
-        <el-button :disabled="!docContent" @click="reset">新建项目</el-button>
+        <el-button :disabled="!docContent" @click="reset">{{ t('requirement.newProject') }}</el-button>
       </div>
       <div class="page-card doc-main">
         <div v-if="!docContent && !generating" class="empty">
-          <el-empty description="点击「生成需求文档」，右侧将流式渲染 Markdown 文档" />
+          <el-empty :description="t('requirement.emptyDesc')" />
         </div>
         <div v-else class="markdown-body doc-body" v-html="renderedDoc"></div>
         <span v-if="generating" class="cursor">▌</span>

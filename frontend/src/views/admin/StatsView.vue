@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getStats } from '../../api'
 import type { Stats } from '../types'
+
+const { t } = useI18n()
 
 const stats = ref<Stats | null>(null)
 
@@ -11,10 +14,10 @@ onMounted(async () => {
 })
 
 const cards = [
-  { key: 'userCount', label: '用户数', icon: 'User' },
-  { key: 'conversationCount', label: '会话数', icon: 'ChatDotRound' },
-  { key: 'messageCount', label: '消息数', icon: 'ChatLineRound' },
-  { key: 'requirementProjectCount', label: '需求项目数', icon: 'Document' }
+  { key: 'userCount', labelKey: 'admin.userCount', icon: 'User' },
+  { key: 'conversationCount', labelKey: 'admin.conversationCount', icon: 'ChatDotRound' },
+  { key: 'messageCount', labelKey: 'admin.messageCount', icon: 'ChatLineRound' },
+  { key: 'requirementProjectCount', labelKey: 'admin.requirementProjectCount', icon: 'Document' }
 ] as const
 </script>
 
@@ -27,7 +30,7 @@ const cards = [
             <el-icon :size="20"><component :is="card.icon" /></el-icon>
           </div>
           <div class="stat-value">{{ stats ? stats[card.key] : '-' }}</div>
-          <div class="stat-label">{{ card.label }}</div>
+          <div class="stat-label">{{ t(card.labelKey) }}</div>
         </div>
       </el-col>
     </el-row>
@@ -36,7 +39,7 @@ const cards = [
       type="info"
       :closable="false"
       show-icon
-      title="管理后台为只读统计，不提供任何用户数据明细，满足最小可见原则。"
+      :title="t('admin.statsNote')"
     />
   </div>
 </template>

@@ -33,7 +33,7 @@
 
 ### 核心特性
 
-- 🔌 **多模型供应商**：DeepSeek / 智谱 GLM / Kimi (Moonshot) / MiniMax / 自定义 OpenAI 兼容网关（OneAPI、NewAPI、vLLM…），后台下拉切换，业务代码零改动
+- 🔌 **多模型供应商**：DeepSeek / 智谱 GLM / Kimi (Moonshot) / MiniMax / OpenAI / Claude / Gemini / 自定义 OpenAI 兼容网关（OneAPI、NewAPI、vLLM…），后台下拉切换，业务代码零改动
 - 🔐 **企业级安全**：API Key AES-256-GCM 加密落库（接口只回显末 4 位）、BCrypt 密码、JWT 双令牌、登录失败锁定、按用户限流、全量审计日志
 - ⚡ **流式体验**：SSE 逐字输出，Nginx 反代已关闭缓冲，部署即可用
 - 🕘 **版本可回溯**：每次生成自动落版本，随时切换对比
@@ -84,6 +84,9 @@ flowchart LR
 | 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-4.5` | [open.bigmodel.cn](https://open.bigmodel.cn) |
 | Kimi (Moonshot) | `https://api.moonshot.cn/v1` | `kimi-k2-0905-preview` | [platform.moonshot.cn](https://platform.moonshot.cn) |
 | MiniMax | `https://api.minimax.chat/v1` | `MiniMax-Text-01` | [platform.minimaxi.com](https://platform.minimaxi.com) |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o` | [platform.openai.com](https://platform.openai.com) |
+| Claude (Anthropic) | `https://api.anthropic.com/v1` | `claude-sonnet-4-5` | [console.anthropic.com](https://console.anthropic.com) |
+| Gemini (Google) | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` | [aistudio.google.com](https://aistudio.google.com) |
 | 自定义 | 任意 OpenAI 兼容网关 | 自填 | OneAPI / NewAPI / vLLM / 中转站 |
 
 > 切换供应商只需在管理后台下拉选择，系统自动填充 Base URL 与默认模型名。配置框内置各家「3 步获取 API Key」教程。

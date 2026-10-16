@@ -5,18 +5,19 @@ const routes = [
   {
     path: '/login',
     name: 'login',
-    component: () => import('../views/LoginView.vue')
+    component: () => import('../views/LoginView.vue'),
+    meta: { title: 'login.tabLogin' }
   },
   {
     path: '/',
     component: () => import('../layouts/MainLayout.vue'),
     children: [
-      { path: '', name: 'home', component: () => import('../views/HomeView.vue'), meta: { requiresAuth: true } },
-      { path: 'prompt', name: 'prompt', component: () => import('../views/PromptView.vue'), meta: { requiresAuth: true } },
-      { path: 'requirement', name: 'requirement', component: () => import('../views/RequirementView.vue'), meta: { requiresAuth: true } },
-      { path: 'history', name: 'history', component: () => import('../views/HistoryView.vue'), meta: { requiresAuth: true } },
-      { path: 'admin/config', name: 'adminConfig', component: () => import('../views/admin/ModelConfigView.vue'), meta: { requiresAuth: true, requiresAdmin: true } },
-      { path: 'admin/stats', name: 'adminStats', component: () => import('../views/admin/StatsView.vue'), meta: { requiresAuth: true, requiresAdmin: true } }
+      { path: '', name: 'home', component: () => import('../views/HomeView.vue'), meta: { requiresAuth: true, title: 'menu.home' } },
+      { path: 'prompt', name: 'prompt', component: () => import('../views/PromptView.vue'), meta: { requiresAuth: true, title: 'menu.prompt' } },
+      { path: 'requirement', name: 'requirement', component: () => import('../views/RequirementView.vue'), meta: { requiresAuth: true, title: 'menu.requirement' } },
+      { path: 'history', name: 'history', component: () => import('../views/HistoryView.vue'), meta: { requiresAuth: true, title: 'menu.history' } },
+      { path: 'admin/config', name: 'adminConfig', component: () => import('../views/admin/ModelConfigView.vue'), meta: { requiresAuth: true, requiresAdmin: true, title: 'menu.adminConfig' } },
+      { path: 'admin/stats', name: 'adminStats', component: () => import('../views/admin/StatsView.vue'), meta: { requiresAuth: true, requiresAdmin: true, title: 'menu.adminStats' } }
     ]
   }
 ]

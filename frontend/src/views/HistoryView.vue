@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import { conversationDetail, conversationList, conversationVersions } from '../api'
 import type { Conversation, ConversationVersion, Message } from '../types'
+
+const { t } = useI18n()
 
 const module = ref('')
 const list = ref<Conversation[]>([])
@@ -62,7 +65,7 @@ function onVersionChange(version: number) {
     const snapshot = JSON.parse(target.snapshot)
     const msgs: { role: string; content: string }[] = snapshot.messages || []
     versionContent.value = msgs
-      .map((m) => (m.role === 'user' ? `【输入】${m.content}` : m.content))
+      .map((m) => (m.role === 'user' ? t('history.inputTag') + m.content : m.content))
       .join('\n\n')
     const last = msgs[msgs.length - 1]
     if (last && last.role === 'assistant' && last.content.trim().startsWith('#')) {
@@ -81,7 +84,7 @@ async function loadMore() {
 onMounted(() => load(true))
 
 function moduleLabel(m: string) {
-  return m === 'requirement' ? '需求助手' : '提示词生成'
+  return m === 'requirement' ? t('history.moduleRequirement') : t('history.modulePrompt')
 }
 </script>
 
@@ -89,13 +92,13 @@ function moduleLabel(m: string) {
   <div class="history-page">
     <div class="page-card list-side">
       <el-radio-group v-model="module" class="filter" @change="onModuleChange">
-        <el-radio-button value="">全部</el-radio-button>
-        <el-radio-button value="prompt">提示词</el-radio-button>
-        <el-radio-button value="requirement">需求助手</el-radio-button>
+        <el-radio-button value="">{{ t('history.filterAll') }}</el-radio-button>
+        <el-radio-button value="prompt">{{ t('history.filterPrompt') }}</el-radio-button>
+        <el-radio-button value="requirement">{{ t('history.filterRequirement') }}</el-radio-button>
       </el-radio-group>
 
       <div v-if="!list.length && !loading" class="empty">
-        <el-empty description="还没有对话记录" />
+        <el-empty :description="t('history.empty')" />
       </div>
 
       <div
@@ -121,7 +124,7 @@ function moduleLabel(m: string) {
         :loading="loading"
         @click="loadMore"
       >
-        加载更多（{{ list.length }}/{{ total }}）
+        {{ t('history.loadMore', { loaded: list.length, total }) }}
       </el-button>
     </div>
 
@@ -132,7 +135,7 @@ function moduleLabel(m: string) {
           <el-select
             v-if="versions.length"
             v-model="selectedVersion"
-            placeholder="选择版本"
+            :placeholder="t('history.selectVersion')"
             class="version-select"
             @change="onVersionChange"
           >
@@ -152,18 +155,18 @@ function moduleLabel(m: string) {
 
         <template v-else>
           <div v-for="msg in messages" :key="msg.id" class="msg" :class="msg.role">
-            <div class="msg-role">{{ msg.role === 'user' ? '我' : 'AI' }}</div>
+            <div class="msg-role">{{ msg.role === 'user' ? t('history.roleUser') : t('history.roleAI') }}</div>
             <div class="msg-content">{{ msg.content }}</div>
           </div>
           <el-alert
             v-if="!messages.length"
-            title="该会话暂无消息"
+            :title="t('history.noMessages')"
             type="info"
             :closable="false"
           />
         </template>
       </template>
-      <el-empty v-else description="从左侧选择一条会话查看详情" />
+      <el-empty v-else :description="t('history.pickConversation')" />
     </div>
   </div>
 </template>

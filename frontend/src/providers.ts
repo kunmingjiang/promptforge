@@ -1,17 +1,20 @@
 /**
  * 模型供应商预设（全站共享）：
- * 所有主流国产大模型均提供 OpenAI 兼容端点，后端 OpenAiCompatProvider 按
- * provider 别名统一适配（deepseek / glm / kimi / minimax / custom）。
+ * 国内外主流大模型均提供 OpenAI 兼容端点，后端 OpenAiCompatProvider 按
+ * provider 别名统一适配（deepseek / glm / kimi / minimax / openai / claude / gemini / custom）。
+ *
+ * 教程文案（steps / tips）走 i18n：locale 文件里 providers.<key>.steps / .tips，
+ * 本文件只保留与技术参数（label / baseUrl / model / 官网）。
  */
 export interface ProviderPreset {
+  /** 品牌名（各语言一致，不翻译） */
   label: string
   baseUrl: string
   model: string
   site: string
   siteName: string
-  /** 获取 Key 的 3 步引导；空数组表示自定义网关不展示教程 */
-  steps: [string, string][]
-  tips: string[]
+  /** 是否有「获取 Key」教程（custom 无） */
+  hasGuide: boolean
 }
 
 export const PROVIDERS: Record<string, ProviderPreset> = {
@@ -21,12 +24,7 @@ export const PROVIDERS: Record<string, ProviderPreset> = {
     model: 'deepseek-chat',
     site: 'https://platform.deepseek.com',
     siteName: 'platform.deepseek.com',
-    steps: [
-      ['注册账号', '打开 platform.deepseek.com，用手机号或邮箱注册并登录'],
-      ['充值', '进入「充值」页面，按 tokens 用量计费，最低可充 10 元，个人使用足够很久'],
-      ['创建 API Key', '进入「API Keys」→「创建 API key」，复制生成的 sk-... 字符串（只显示一次，务必保存好）']
-    ],
-    tips: ['模型名填 deepseek-chat（V3 通用模型）或 deepseek-reasoner（R1 推理模型）']
+    hasGuide: true
   },
   glm: {
     label: '智谱 GLM',
@@ -34,12 +32,7 @@ export const PROVIDERS: Record<string, ProviderPreset> = {
     model: 'glm-4.5',
     site: 'https://open.bigmodel.cn',
     siteName: 'open.bigmodel.cn',
-    steps: [
-      ['注册账号', '打开 open.bigmodel.cn（智谱开放平台），注册并登录'],
-      ['实名认证', '按指引完成实名认证，新用户会赠送免费 tokens 额度'],
-      ['创建 API Key', '进入「控制台」→「API Keys」，复制生成的 Key（只显示一次，务必保存好）']
-    ],
-    tips: ['模型名可填 glm-4.5、glm-4.5-air（更便宜）或 glm-4-flash（免费）']
+    hasGuide: true
   },
   kimi: {
     label: 'Kimi',
@@ -47,12 +40,7 @@ export const PROVIDERS: Record<string, ProviderPreset> = {
     model: 'kimi-k2-0905-preview',
     site: 'https://platform.moonshot.cn',
     siteName: 'platform.moonshot.cn',
-    steps: [
-      ['注册账号', '打开 platform.moonshot.cn（月之暗面开放平台），注册并登录'],
-      ['充值', '新用户会赠送免费额度，用完后按 tokens 计费'],
-      ['创建 API Key', '进入「API Key 管理」→「新建」，复制生成的 Key（只显示一次，务必保存好）']
-    ],
-    tips: ['模型名可填 kimi-k2 系列，长文本场景可用 moonshot-v1-128k']
+    hasGuide: true
   },
   minimax: {
     label: 'MiniMax',
@@ -60,12 +48,31 @@ export const PROVIDERS: Record<string, ProviderPreset> = {
     model: 'MiniMax-Text-01',
     site: 'https://platform.minimaxi.com',
     siteName: 'platform.minimaxi.com',
-    steps: [
-      ['注册账号', '打开 platform.minimaxi.com（MiniMax 开放平台），注册并登录'],
-      ['充值', '新用户会赠送免费额度，用完后按 tokens 计费'],
-      ['创建 API Key', '进入「账户管理」→「API Keys」，复制生成的 Key（只显示一次，务必保存好）']
-    ],
-    tips: ['模型名填 MiniMax-Text-01 或 MiniMax-M1（推理模型）']
+    hasGuide: true
+  },
+  openai: {
+    label: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+    site: 'https://platform.openai.com',
+    siteName: 'platform.openai.com',
+    hasGuide: true
+  },
+  claude: {
+    label: 'Claude',
+    baseUrl: 'https://api.anthropic.com/v1',
+    model: 'claude-sonnet-4-5',
+    site: 'https://console.anthropic.com',
+    siteName: 'console.anthropic.com',
+    hasGuide: true
+  },
+  gemini: {
+    label: 'Gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    model: 'gemini-2.5-flash',
+    site: 'https://aistudio.google.com',
+    siteName: 'aistudio.google.com',
+    hasGuide: true
   },
   custom: {
     label: '自定义',
@@ -73,12 +80,23 @@ export const PROVIDERS: Record<string, ProviderPreset> = {
     model: '',
     site: '',
     siteName: '',
-    steps: [],
-    tips: ['适用于 OneAPI / NewAPI / vLLM / 公司内网网关等任意 OpenAI 兼容服务']
+    hasGuide: false
   }
 }
 
-export const providerOptions = Object.keys(PROVIDERS).map((key) => ({
+/** 供应商展示顺序（配置弹框/管理后台共用） */
+export const providerOrder = [
+  'deepseek',
+  'glm',
+  'kimi',
+  'minimax',
+  'openai',
+  'claude',
+  'gemini',
+  'custom'
+]
+
+export const providerOptions = providerOrder.map((key) => ({
   key,
   label: PROVIDERS[key].label
 }))

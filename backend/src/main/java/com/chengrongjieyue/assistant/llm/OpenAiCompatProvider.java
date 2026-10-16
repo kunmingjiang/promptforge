@@ -36,7 +36,8 @@ public class OpenAiCompatProvider implements LlmProvider {
 
     /** 各家协议一致，同一实现按别名响应多个 provider 标识 */
     private static final List<String> ALIASES =
-            List.of("deepseek", "glm", "zhipu", "kimi", "moonshot", "minimax", "custom");
+            List.of("deepseek", "glm", "zhipu", "kimi", "moonshot", "minimax",
+                    "openai", "claude", "anthropic", "gemini", "google", "custom");
 
     private final ObjectMapper objectMapper;
 

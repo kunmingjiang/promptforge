@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, FormInstance } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 const activeTab = ref('login')
 const loading = ref(false)
@@ -16,18 +18,12 @@ const registerFormRef = ref<FormInstance>()
 const loginForm = reactive({ username: '', password: '' })
 const registerForm = reactive({ username: '', password: '', email: '' })
 
-const features = [
-  { tag: '01', title: '提示词引擎', desc: '一句需求，产出结构化、可复用的工程化提示词' },
-  { tag: '02', title: '需求引导链', desc: 'AI 多轮追问澄清，生成 Markdown 需求文档' },
-  { tag: '03', title: '版本可回溯', desc: '每次生成都落版本，随时回看与切换' }
-]
-
 async function onLogin() {
   await loginFormRef.value?.validate()
   loading.value = true
   try {
     await auth.login(loginForm)
-    ElMessage.success('登录成功')
+    ElMessage.success(t('login.loginSuccess'))
     router.push((route.query.redirect as string) || '/')
   } finally {
     loading.value = false
@@ -39,7 +35,7 @@ async function onRegister() {
   loading.value = true
   try {
     await auth.register(registerForm)
-    ElMessage.success('注册成功，已自动登录')
+    ElMessage.success(t('login.registerSuccess'))
     router.push('/')
   } finally {
     loading.value = false
@@ -56,15 +52,29 @@ async function onRegister() {
           <span class="brand-mark">城</span>
           <span class="mono-tag">PROMPTFORGE · AI WORKSPACE</span>
         </div>
-        <h1 class="headline">把一句大白话，<br />变成大模型听得懂的<span class="accent">专业指令</span></h1>
-        <p class="sub">自部署的开源 AI 提示词与需求助手。管理员配置一次 DeepSeek，全员直接使用。</p>
+        <h1 class="headline">{{ t('login.headlinePre') }}<br /><span class="accent">{{ t('login.headlineAccent') }}</span></h1>
+        <p class="sub">{{ t('login.sub') }}</p>
 
         <div class="feature-list">
-          <div v-for="f in features" :key="f.tag" class="feature">
-            <span class="feature-tag mono-tag">{{ f.tag }}</span>
+          <div class="feature">
+            <span class="feature-tag mono-tag">01</span>
             <div>
-              <div class="feature-title">{{ f.title }}</div>
-              <div class="feature-desc">{{ f.desc }}</div>
+              <div class="feature-title">{{ t('login.feature1Title') }}</div>
+              <div class="feature-desc">{{ t('login.feature1Desc') }}</div>
+            </div>
+          </div>
+          <div class="feature">
+            <span class="feature-tag mono-tag">02</span>
+            <div>
+              <div class="feature-title">{{ t('login.feature2Title') }}</div>
+              <div class="feature-desc">{{ t('login.feature2Desc') }}</div>
+            </div>
+          </div>
+          <div class="feature">
+            <span class="feature-tag mono-tag">03</span>
+            <div>
+              <div class="feature-title">{{ t('login.feature3Title') }}</div>
+              <div class="feature-desc">{{ t('login.feature3Desc') }}</div>
             </div>
           </div>
         </div>
@@ -78,53 +88,53 @@ async function onRegister() {
       <div class="form-box">
         <div class="form-brand">
           <span class="brand-mark">铸</span>
-          <h2 class="form-title">铸语 PromptForge</h2>
-          <p class="form-sub">提示词生成 · 需求文档一步到位</p>
+          <h2 class="form-title">{{ t('login.formTitle') }}</h2>
+          <p class="form-sub">{{ t('login.formSub') }}</p>
         </div>
 
         <el-tabs v-model="activeTab" stretch>
-          <el-tab-pane label="登录" name="login">
+          <el-tab-pane :label="t('login.tabLogin')" name="login">
             <el-form ref="loginFormRef" :model="loginForm" label-position="top" @keyup.enter="onLogin">
               <el-form-item prop="username" required>
-                <el-input v-model="loginForm.username" placeholder="用户名" size="large" />
+                <el-input v-model="loginForm.username" :placeholder="t('login.username')" size="large" />
               </el-form-item>
               <el-form-item prop="password" required>
-                <el-input v-model="loginForm.password" type="password" show-password placeholder="密码" size="large" />
+                <el-input v-model="loginForm.password" type="password" show-password :placeholder="t('login.password')" size="large" />
               </el-form-item>
               <el-button type="primary" size="large" class="submit-btn" :loading="loading" @click="onLogin">
-                登录
+                {{ t('login.loginBtn') }}
               </el-button>
             </el-form>
           </el-tab-pane>
 
-          <el-tab-pane label="注册" name="register">
+          <el-tab-pane :label="t('login.tabRegister')" name="register">
             <el-form ref="registerFormRef" :model="registerForm" label-position="top" @keyup.enter="onRegister">
               <el-form-item
                 prop="username"
                 required
                 :rules="[
-                  { required: true, message: '请输入用户名' },
-                  { min: 3, max: 32, message: '长度 3-32 位' },
-                  { pattern: /^[a-zA-Z0-9_-]+$/, message: '仅支持字母、数字、下划线和短横线' }
+                  { required: true, message: t('login.ruleUsernameRequired') },
+                  { min: 3, max: 32, message: t('login.ruleUsernameLen') },
+                  { pattern: /^[a-zA-Z0-9_-]+$/, message: t('login.ruleUsernamePattern') }
                 ]"
               >
-                <el-input v-model="registerForm.username" placeholder="用户名" size="large" />
+                <el-input v-model="registerForm.username" :placeholder="t('login.username')" size="large" />
               </el-form-item>
               <el-form-item
                 prop="password"
                 required
                 :rules="[
-                  { required: true, message: '请输入密码' },
-                  { min: 6, max: 64, message: '长度 6-64 位' }
+                  { required: true, message: t('login.rulePasswordRequired') },
+                  { min: 6, max: 64, message: t('login.rulePasswordLen') }
                 ]"
               >
-                <el-input v-model="registerForm.password" type="password" show-password placeholder="密码（至少 6 位）" size="large" />
+                <el-input v-model="registerForm.password" type="password" show-password :placeholder="t('login.passwordRegister')" size="large" />
               </el-form-item>
               <el-form-item prop="email">
-                <el-input v-model="registerForm.email" placeholder="邮箱（选填）" size="large" />
+                <el-input v-model="registerForm.email" :placeholder="t('login.emailOptional')" size="large" />
               </el-form-item>
               <el-button type="primary" size="large" class="submit-btn" :loading="loading" @click="onRegister">
-                注册并登录
+                {{ t('login.registerBtn') }}
               </el-button>
             </el-form>
           </el-tab-pane>

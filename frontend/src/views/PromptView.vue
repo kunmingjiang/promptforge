@@ -1,21 +1,23 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { streamSse } from '../utils/sse'
 import { promptVersions, promptTest, promptFinalize, promptAgentKit } from '../api'
 import type { ConversationVersion, AgentKit } from '../types'
 import ModelStatusBar from '../components/ModelStatusBar.vue'
 
+const { t } = useI18n()
 const modelBar = ref<InstanceType<typeof ModelStatusBar>>()
 
 /* ============ 左栏：需求输入 ============ */
 const input = ref('')
 const generating = ref(false)
-const samples = [
-  '帮我写一个面向程序员的周报生成提示词，要求输出结构化 Markdown',
-  '生成一个代码评审助手提示词，按严重级别分级输出修改意见',
-  '我要一个把会议记录转成待办清单的提示词，能识别负责人和截止时间'
-]
+const samples = computed(() => [
+  t('prompt.sample1'),
+  t('prompt.sample2'),
+  t('prompt.sample3')
+])
 
 /* ============ 右栏工作台状态 ============ */
 const activeTab = ref('result')
@@ -56,7 +58,7 @@ function selectVersion(index: number) {
 
 async function generate() {
   if (!input.value.trim()) {
-    ElMessage.warning('请先输入你的需求描述')
+    ElMessage.warning(t('prompt.warnNeedInput'))
     return
   }
   if (modelBar.value && !(await modelBar.value.ensureReady())) return
@@ -73,7 +75,7 @@ async function generate() {
     onDone: async (data) => {
       conversationId.value = data.conversationId
       finalized.value = false
-      savedInfo.value = `已保存 · v${data.version ?? '-'} · 接下来可以「试运行」验证效果`
+      savedInfo.value = t('prompt.savedGenerate', { v: data.version ?? '-' })
       await loadVersions('latest')
     },
     onError: (message) => {
@@ -92,12 +94,12 @@ const testLatency = ref(0)
 
 async function runTest() {
   if (!output.value) {
-    ElMessage.warning('请先生成或选择一个提示词版本')
+    ElMessage.warning(t('prompt.warnNeedVersion'))
     activeTab.value = 'result'
     return
   }
   if (!testInput.value.trim()) {
-    ElMessage.warning('请填写测试输入（模拟真实用户会说什么）')
+    ElMessage.warning(t('prompt.warnNeedTestInput'))
     return
   }
   if (modelBar.value && !(await modelBar.value.ensureReady())) return
@@ -109,7 +111,7 @@ async function runTest() {
     testLatency.value = res.data.latencyMs
   } catch (e: unknown) {
     const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-    ElMessage.error(msg || '试运行失败，请检查模型配置')
+    ElMessage.error(msg || t('prompt.testFailed'))
   } finally {
     testing.value = false
   }
@@ -117,22 +119,29 @@ async function runTest() {
 
 function goOptimizeWithTestResult() {
   activeTab.value = 'optimize'
-  feedback.value = '试运行输出不符合预期，请修复暴露的问题'
+  feedback.value = t('prompt.goOptimizeFeedback')
 }
 
 /* ============ 优化迭代 ============ */
 const feedback = ref('')
-const quickDirections = ['输出更简洁凝练', '指令约束更严格', '补充few-shot示例', '角色设定更鲜明', '强化输出格式', '修复试运行暴露的问题']
+const quickDirections = computed(() => [
+  t('prompt.direction1'),
+  t('prompt.direction2'),
+  t('prompt.direction3'),
+  t('prompt.direction4'),
+  t('prompt.direction5'),
+  t('prompt.direction6')
+])
 const optimizeTestOutput = computed(() => (testOutput.value ? testOutput.value : ''))
 
 async function optimize() {
   if (!conversationId.value) {
-    ElMessage.warning('请先生成一个提示词')
+    ElMessage.warning(t('prompt.warnNeedPrompt'))
     activeTab.value = 'result'
     return
   }
   if (!feedback.value.trim()) {
-    ElMessage.warning('请描述优化方向：点快捷标签或在下方自由填写')
+    ElMessage.warning(t('prompt.warnNeedFeedback'))
     return
   }
   if (modelBar.value && !(await modelBar.value.ensureReady())) return
@@ -152,10 +161,10 @@ async function optimize() {
     onDone: async (data) => {
       feedback.value = ''
       optimizePreview.value = ''
-      savedInfo.value = `优化完成 · 新版本 v${data.version ?? '-'} 已保存，可在「结果」标签回看全部版本`
+      savedInfo.value = t('prompt.savedOptimize', { v: data.version ?? '-' })
       await loadVersions('latest')
       activeTab.value = 'result'
-      ElMessage.success(`已生成新版本 v${data.version ?? ''}`)
+      ElMessage.success(t('prompt.newVersionMsg', { v: data.version ?? '' }))
     },
     onError: (message) => {
       ElMessage.error(message)
@@ -174,7 +183,7 @@ async function doFinalize() {
   try {
     await promptFinalize(conversationId.value)
     finalized.value = true
-    ElMessage.success('已定稿，可以拿去创建智能体了')
+    ElMessage.success(t('prompt.warnFinalizeDone'))
   } finally {
     finalizing.value = false
   }
@@ -196,12 +205,12 @@ const publishing = ref(false)
 
 async function buildKit() {
   if (!output.value) {
-    ElMessage.warning('请先生成提示词')
+    ElMessage.warning(t('prompt.warnNeedPrompt'))
     activeTab.value = 'result'
     return
   }
   if (!agentName.value.trim()) {
-    ElMessage.warning('给你的智能体起个名字')
+    ElMessage.warning(t('prompt.warnNeedAgentName'))
     return
   }
   if (modelBar.value && !(await modelBar.value.ensureReady())) return
@@ -217,20 +226,20 @@ async function buildKit() {
     kit.value = res.data
   } catch (e: unknown) {
     const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-    ElMessage.error(msg || '生成上架材料失败')
+    ElMessage.error(msg || t('prompt.buildKitFailed'))
   } finally {
     publishing.value = false
   }
 }
 
-async function copy(text: string | null | undefined, label = '已复制') {
+async function copy(text: string | null | undefined, label?: string) {
   if (!text) return
   await navigator.clipboard.writeText(text)
-  ElMessage.success(label)
+  ElMessage.success(label || t('prompt.copied'))
 }
 
 function copyOutput() {
-  copy(output.value, '提示词已复制到剪贴板')
+  copy(output.value, t('prompt.copiedPrompt'))
 }
 </script>
 
@@ -240,7 +249,7 @@ function copyOutput() {
       <el-col :span="12">
         <div class="page-card input-card">
           <div class="card-head">
-            <h3 class="panel-title">你的需求</h3>
+            <h3 class="panel-title">{{ t('prompt.inputTitle') }}</h3>
             <ModelStatusBar ref="modelBar" />
           </div>
           <el-input
@@ -249,14 +258,14 @@ function copyOutput() {
             :rows="8"
             maxlength="4000"
             show-word-limit
-            placeholder="用一句大白话描述你要的提示词，例如：帮我写一个周报生成器…"
+            :placeholder="t('prompt.inputPlaceholder')"
           />
           <div class="actions">
-            <el-button type="primary" size="large" :loading="generating" @click="generate">生成提示词</el-button>
-            <el-button size="large" :disabled="!output" @click="copyOutput">复制结果</el-button>
+            <el-button type="primary" size="large" :loading="generating" @click="generate">{{ t('prompt.generate') }}</el-button>
+            <el-button size="large" :disabled="!output" @click="copyOutput">{{ t('prompt.copyResult') }}</el-button>
           </div>
           <div v-if="versions.length" class="version-bar">
-            <span class="version-label mono-tag">版本</span>
+            <span class="version-label mono-tag">{{ t('prompt.version') }}</span>
             <button
               v-for="(v, i) in versions"
               :key="v.id"
@@ -265,7 +274,7 @@ function copyOutput() {
               :class="{ active: i === currentIndex }"
               @click="selectVersion(i)"
             >v{{ v.version }}</button>
-            <span v-if="finalized" class="finalized-badge">✓ 已定稿</span>
+            <span v-if="finalized" class="finalized-badge">{{ t('prompt.finalized') }}</span>
           </div>
           <p v-if="savedInfo" class="saved-info">{{ savedInfo }}</p>
         </div>
@@ -275,10 +284,10 @@ function copyOutput() {
         <div class="page-card output-card">
           <el-tabs v-model="activeTab" class="workbench-tabs">
             <!-- 结果 -->
-            <el-tab-pane label="结果" name="result">
+            <el-tab-pane :label="t('prompt.tabResult')" name="result">
               <div v-if="!output && !generating" class="empty">
-                <p class="empty-title">还没有结果</p>
-                <p class="empty-desc">在左侧输入需求并点击「生成提示词」，这里会流式输出。不知道写什么？点一条试试：</p>
+                <p class="empty-title">{{ t('prompt.emptyTitle') }}</p>
+                <p class="empty-desc">{{ t('prompt.emptyDesc') }}</p>
                 <div class="samples">
                   <button
                     v-for="s in samples"
@@ -291,35 +300,35 @@ function copyOutput() {
               </div>
               <div v-else class="stream-output">{{ output }}<span v-if="generating" class="cursor">▌</span></div>
               <div v-if="versions.length > 1" class="version-note">
-                正在查看 v{{ currentVersion?.version }} / 共 {{ versions.length }} 版，点左下角版本号可回看历史版本
+                {{ t('prompt.versionNote', { current: currentVersion?.version, total: versions.length }) }}
               </div>
             </el-tab-pane>
 
             <!-- 试运行 -->
-            <el-tab-pane label="试运行" name="test">
-              <p class="tab-hint">把当前版本的提示词当成真实系统跑一遍：输入一段模拟的用户话，看模型真实反馈。</p>
+            <el-tab-pane :label="t('prompt.tabTest')" name="test">
+              <p class="tab-hint">{{ t('prompt.testHint') }}</p>
               <el-input
                 v-model="testInput"
                 type="textarea"
                 :rows="3"
                 maxlength="4000"
-                placeholder="模拟用户输入，例如：帮我把今天的会议记录整理成周报…"
+                :placeholder="t('prompt.testInputPlaceholder')"
               />
               <div class="tab-actions">
-                <el-button type="primary" :loading="testing" :disabled="!output" @click="runTest">运行测试</el-button>
-                <el-button v-if="testOutput" @click="goOptimizeWithTestResult">不满意，带结果去优化 →</el-button>
+                <el-button type="primary" :loading="testing" :disabled="!output" @click="runTest">{{ t('prompt.runTest') }}</el-button>
+                <el-button v-if="testOutput" @click="goOptimizeWithTestResult">{{ t('prompt.goOptimize') }}</el-button>
               </div>
               <div v-if="testOutput" class="test-result">
                 <div class="result-head">
-                  <span class="mono-tag">模型输出 · {{ testLatency }}ms</span>
+                  <span class="mono-tag">{{ t('prompt.modelOutput', { ms: testLatency }) }}</span>
                 </div>
                 <div class="test-output">{{ testOutput }}</div>
               </div>
             </el-tab-pane>
 
             <!-- 优化 -->
-            <el-tab-pane label="优化" name="optimize">
-              <p class="tab-hint">告诉 AI 哪里不满意：可点快捷标签，也可自由描述。优化会生成新版本，随时可回看。</p>
+            <el-tab-pane :label="t('prompt.tabOptimize')" name="optimize">
+              <p class="tab-hint">{{ t('prompt.optimizeHint') }}</p>
               <div class="direction-chips">
                 <button
                   v-for="d in quickDirections"
@@ -334,25 +343,25 @@ function copyOutput() {
                 type="textarea"
                 :rows="3"
                 maxlength="2000"
-                placeholder="例如：输出里不要出现免责声明；日期格式统一用 YYYY-MM-DD…"
+                :placeholder="t('prompt.optimizeInputPlaceholder')"
               />
               <div class="tab-actions">
                 <el-button type="primary" :loading="optimizing" :disabled="!conversationId" @click="optimize">
-                  生成下一版
+                  {{ t('prompt.generateNext') }}
                 </el-button>
-                <span v-if="testOutput" class="carry-tag">✓ 将附带试运行结果作为优化依据</span>
+                <span v-if="testOutput" class="carry-tag">{{ t('prompt.carryTag') }}</span>
               </div>
               <div v-if="optimizePreview" class="test-result">
-                <div class="result-head"><span class="mono-tag">正在生成新版本…</span></div>
+                <div class="result-head"><span class="mono-tag">{{ t('prompt.generatingNew') }}</span></div>
                 <div class="test-output">{{ optimizePreview }}<span class="cursor">▌</span></div>
               </div>
             </el-tab-pane>
 
             <!-- 上架智能体 -->
-            <el-tab-pane label="创建智能体" name="publish">
-              <p class="tab-hint">把满意的提示词一键打包成目标平台的创建材料：开场白 + 创建步骤 + 调用示例。</p>
+            <el-tab-pane :label="t('prompt.tabPublish')" name="publish">
+              <p class="tab-hint">{{ t('prompt.publishHint') }}</p>
               <div class="publish-form">
-                <el-input v-model="agentName" maxlength="64" placeholder="智能体名称，例如：周报小助手" />
+                <el-input v-model="agentName" maxlength="64" :placeholder="t('prompt.agentNamePlaceholder')" />
                 <div class="platform-row">
                   <button
                     v-for="p in platforms"
@@ -363,9 +372,9 @@ function copyOutput() {
                     @click="platform = p.key"
                   >{{ p.label }}</button>
                 </div>
-                <el-input v-model="greeting" maxlength="500" placeholder="开场白（留空则 AI 自动生成）" />
+                <el-input v-model="greeting" maxlength="500" :placeholder="t('prompt.greetingPlaceholder')" />
                 <el-button type="primary" :loading="publishing" :disabled="!output" @click="buildKit">
-                  生成上架材料包
+                  {{ t('prompt.buildKit') }}
                 </el-button>
               </div>
               <div v-if="kit" class="kit-card">
@@ -374,26 +383,26 @@ function copyOutput() {
                   <li v-for="(s, i) in kit.steps" :key="i">{{ s }}</li>
                 </ol>
                 <a v-if="kit.platformSite" :href="kit.platformSite" target="_blank" class="kit-link" rel="noopener">
-                  前往 {{ kit.platformLabel }} 创建 ↗
+                  {{ t('prompt.goToPlatform', { name: kit.platformLabel }) }}
                 </a>
                 <div class="kit-block">
                   <div class="kit-block-head">
-                    <span class="mono-tag">开场白</span>
-                    <button type="button" class="copy-link" @click="copy(kit.greeting, '开场白已复制')">复制</button>
+                    <span class="mono-tag">{{ t('prompt.kitGreeting') }}</span>
+                    <button type="button" class="copy-link" @click="copy(kit.greeting, t('prompt.copiedGreeting'))">{{ t('prompt.copy') }}</button>
                   </div>
                   <div class="kit-block-body">{{ kit.greeting }}</div>
                 </div>
                 <div class="kit-block">
                   <div class="kit-block-head">
-                    <span class="mono-tag">系统提示词（粘贴到平台设定/Instructions）</span>
-                    <button type="button" class="copy-link" @click="copy(kit.systemPrompt, '提示词已复制')">复制</button>
+                    <span class="mono-tag">{{ t('prompt.kitSystemPrompt') }}</span>
+                    <button type="button" class="copy-link" @click="copy(kit.systemPrompt, t('prompt.copiedPrompt'))">{{ t('prompt.copy') }}</button>
                   </div>
                   <div class="kit-block-body pre">{{ kit.systemPrompt }}</div>
                 </div>
                 <div v-if="kit.callExample" class="kit-block">
                   <div class="kit-block-head">
-                    <span class="mono-tag">调用示例</span>
-                    <button type="button" class="copy-link" @click="copy(kit.callExample, '示例已复制')">复制</button>
+                    <span class="mono-tag">{{ t('prompt.kitCallExample') }}</span>
+                    <button type="button" class="copy-link" @click="copy(kit.callExample, t('prompt.copiedExample'))">{{ t('prompt.copy') }}</button>
                   </div>
                   <div class="kit-block-body pre">{{ kit.callExample }}</div>
                 </div>
