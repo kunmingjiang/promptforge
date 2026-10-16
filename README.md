@@ -14,7 +14,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 
-**English | [中文](#铸语-promptforge)** · 一键部署 · 多模型供应商 · SSE 流式输出
+**中文 | [English](./README_EN.md)** · 一键部署 · 多模型供应商 · SSE 流式输出
 
 </div>
 
