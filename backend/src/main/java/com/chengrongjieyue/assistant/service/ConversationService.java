@@ -48,7 +48,7 @@ public class ConversationService {
                 .map(m -> new MessageVO(m.getId(), m.getRole(), m.getContent(), m.getCreatedAt()))
                 .toList();
         return new ConversationDetailVO(conversation.getId(), conversation.getTitle(),
-                conversation.getModule(), conversation.getCreatedAt(), messageVOs);
+                conversation.getModule(), conversation.getFinalized(), conversation.getCreatedAt(), messageVOs);
     }
 
     public List<ConversationVersionVO> versions(Long userId, Long conversationId) {

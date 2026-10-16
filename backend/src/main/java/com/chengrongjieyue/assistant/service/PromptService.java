@@ -2,6 +2,10 @@ package com.chengrongjieyue.assistant.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.chengrongjieyue.assistant.common.BizException;
+import com.chengrongjieyue.assistant.common.ErrorCode;
+import com.chengrongjieyue.assistant.dto.PromptOptimizeRequest;
+import com.chengrongjieyue.assistant.dto.PromptTestRequest;
+import com.chengrongjieyue.assistant.dto.AgentKitRequest;
 import com.chengrongjieyue.assistant.entity.Conversation;
 import com.chengrongjieyue.assistant.entity.ConversationVersion;
 import com.chengrongjieyue.assistant.entity.Message;
@@ -10,11 +14,14 @@ import com.chengrongjieyue.assistant.llm.LlmMessage;
 import com.chengrongjieyue.assistant.llm.LlmProvider;
 import com.chengrongjieyue.assistant.llm.LlmProviderFactory;
 import com.chengrongjieyue.assistant.llm.LlmRequest;
+import com.chengrongjieyue.assistant.llm.LlmResponse;
 import com.chengrongjieyue.assistant.llm.LlmStreamCallback;
 import com.chengrongjieyue.assistant.mapper.ConversationMapper;
 import com.chengrongjieyue.assistant.mapper.ConversationVersionMapper;
 import com.chengrongjieyue.assistant.mapper.MessageMapper;
 import com.chengrongjieyue.assistant.ratelimit.LlmRateLimitService;
+import com.chengrongjieyue.assistant.vo.AgentKitVO;
+import com.chengrongjieyue.assistant.vo.PromptTestResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -131,8 +138,232 @@ public class PromptService {
         }));
     }
 
-    private void persistAssistant(Long conversationId, String content) {
-        if (content == null || content.isBlank()) {
+    /**
+     * 试运行：把生成的提示词当作系统指令，喂一段测试输入，看真实模型效果。
+     * 不落库——试运行只是临时验证，审计由切面记录
+     */
+    public PromptTestResult testRun(Long userId, PromptTestRequest request) {
+        ModelConfig config = modelConfigService.getActive();
+        LlmRequest llmRequest = modelConfigService.buildLlmRequest(config,
+                List.of(new LlmMessage("system", request.prompt()),
+                        new LlmMessage("user", request.testInput())), false);
+        long start = System.currentTimeMillis();
+        LlmResponse response = providerFactory.get(config.getProvider()).chat(llmRequest);
+        return new PromptTestResult(response.content(), System.currentTimeMillis() - start);
+    }
+
+    /**
+     * 优化迭代：当前版本提示词 + 试运行暴露的问题 + 用户反馈 → 流式生成下一版。
+     * 新版本作为同会话的后续消息落库，并打新的会话版本快照，可随时回看/回滚
+     */
+    public void optimizeStream(Long userId, PromptOptimizeRequest request, SseEmitter emitter) {
+        if (!rateLimitService.tryAcquire(userId)) {
+            sendError(emitter, "请求过于频繁，每分钟最多发起 10 次生成，请稍后再试");
+            emitter.complete();
+            return;
+        }
+        Conversation conversation;
+        try {
+            conversation = conversationMapper.selectById(request.conversationId());
+            if (conversation == null) {
+                throw new BizException(ErrorCode.NOT_FOUND, "会话不存在");
+            }
+            if (!conversation.getUserId().equals(userId)) {
+                throw new BizException(ErrorCode.FORBIDDEN, "无权访问该会话");
+            }
+        } catch (BizException e) {
+            sendError(emitter, e.getMessage());
+            emitter.complete();
+            return;
+        }
+        String currentPrompt = latestAssistant(conversation.getId());
+        if (currentPrompt == null) {
+            sendError(emitter, "该会话还没有可优化的提示词");
+            emitter.complete();
+            return;
+        }
+        ModelConfig config;
+        try {
+            config = modelConfigService.getActive();
+        } catch (BizException e) {
+            sendError(emitter, e.getMessage());
+            emitter.complete();
+            return;
+        }
+
+        String optimizeInstruction = buildOptimizeInstruction(
+                currentPrompt, request.feedback(), request.testInput(), request.testOutput());
+
+        Message userMessage = new Message();
+        userMessage.setConversationId(conversation.getId());
+        userMessage.setRole("user");
+        userMessage.setContent("[优化迭代] " + request.feedback());
+        messageMapper.insert(userMessage);
+
+        LlmProvider provider = providerFactory.get(config.getProvider());
+        LlmRequest llmRequest = modelConfigService.buildLlmRequest(config,
+                List.of(new LlmMessage("system", OPTIMIZE_SYSTEM_PROMPT),
+                        new LlmMessage("user", optimizeInstruction)), true);
+        Long conversationId = conversation.getId();
+
+        llmExecutor.execute(() -> provider.chatStream(llmRequest, new LlmStreamCallback() {
+            @Override
+            public void onChunk(String delta) {
+                send(emitter, "message", Map.of("delta", delta));
+            }
+
+            @Override
+            public void onComplete(String fullContent) {
+                persistAssistant(conversationId, fullContent);
+                Integer version = saveVersion(conversationId);
+                Map<String, Object> done = new HashMap<>();
+                done.put("conversationId", conversationId);
+                done.put("version", version);
+                send(emitter, "done", done);
+                emitter.complete();
+            }
+
+            @Override
+            public void onError(String message) {
+                log.warn("提示词优化中断: {}", message);
+                sendError(emitter, message);
+                emitter.complete();
+            }
+        }));
+    }
+
+    /** 标记定稿：客户确认当前版本满意，作为最终交付 */
+    public void finalize(Long userId, Long conversationId) {
+        Conversation conversation = conversationMapper.selectById(conversationId);
+        if (conversation == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "会话不存在");
+        }
+        if (!conversation.getUserId().equals(userId)) {
+            throw new BizException(ErrorCode.FORBIDDEN, "无权访问该会话");
+        }
+        conversation.setFinalized(true);
+        conversationMapper.updateById(conversation);
+    }
+
+    /**
+     * 智能体上架套件：定稿提示词 + 目标平台 → 开场白（AI 生成）+ 真实平台创建步骤 + 调用示例。
+     * 各智能体平台没有公开的"创建智能体"API，因此交付的是可直接照做的创建材料包
+     */
+    public AgentKitVO agentKit(Long userId, AgentKitRequest request) {
+        Platform platform = PLATFORMS.get(request.platform());
+        if (platform == null) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "不支持的平台，可选：" + String.join(" / ", PLATFORMS.keySet()));
+        }
+        String greeting = request.greeting();
+        if (greeting == null || greeting.isBlank()) {
+            greeting = generateGreeting(request.agentName(), request.prompt());
+        }
+        String callExample = null;
+        if ("custom".equals(request.platform())) {
+            callExample = """
+                    curl -X POST "{你的模型服务地址}/chat/completions" \\
+                      -H "Authorization: Bearer {你的 API Key}" \\
+                      -H "Content-Type: application/json" \\
+                      -d '{
+                        "model": "{模型名}",
+                        "messages": [
+                          {"role": "system", "content": "<把左侧系统提示词粘贴到这里>"},
+                          {"role": "user", "content": "用户输入"}
+                        ]
+                      }'""";
+        }
+        return new AgentKitVO(request.agentName(), request.prompt(), greeting,
+                request.platform(), platform.label(), platform.site(), platform.steps(), platform.tip(), callExample);
+    }
+
+    private static final String OPTIMIZE_SYSTEM_PROMPT = """
+            你是一名资深的 AI 提示词工程师。你会拿到：一段现成的提示词、它在试运行中的表现（可选）、以及用户的优化反馈。
+            你的任务是输出改进后的新版本提示词。要求：
+            1. 只输出新提示词本身，不要解释改动点，不要寒暄；
+            2. 保留原版本中已经有效的部分，针对性修复用户指出的问题；
+            3. 新版本必须在结构（角色/目标/输入/输出格式/约束）上完整自洽；
+            4. 使用简体中文。
+            """;
+
+    private String buildOptimizeInstruction(String currentPrompt, String feedback, String testInput, String testOutput) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("【当前提示词】\n").append(currentPrompt).append("\n\n");
+        if (testInput != null && !testInput.isBlank()) {
+            sb.append("【试运行输入】\n").append(testInput).append("\n\n");
+        }
+        if (testOutput != null && !testOutput.isBlank()) {
+            sb.append("【试运行输出】\n").append(testOutput).append("\n\n");
+        }
+        sb.append("【优化反馈】\n").append(feedback);
+        return sb.toString();
+    }
+
+    private String generateGreeting(String agentName, String prompt) {
+        try {
+            ModelConfig config = modelConfigService.getActive();
+            LlmRequest llmRequest = modelConfigService.buildLlmRequest(config,
+                    List.of(new LlmMessage("system", "你是智能体文案助手。为智能体生成一句开场白：说明它能帮用户做什么，语气友好专业，40 字以内，只输出开场白本身。"),
+                            new LlmMessage("user", "智能体名称：" + agentName + "\n它的提示词职责如下：\n" + prompt)), false);
+            LlmResponse response = providerFactory.get(config.getProvider()).chat(llmRequest);
+            if (response.content() != null && !response.content().isBlank()) {
+                return response.content().strip();
+            }
+        } catch (Exception e) {
+            log.warn("开场白生成失败，使用默认文案: {}", e.toString());
+        }
+        return "你好，我是「" + agentName + "」，告诉我你的需求，我来帮你完成。";
+    }
+
+    private String latestAssistant(Long conversationId) {
+        List<Message> messages = messageMapper.selectList(new LambdaQueryWrapper<Message>()
+                .eq(Message::getConversationId, conversationId)
+                .eq(Message::getRole, "assistant")
+                .orderByDesc(Message::getId)
+                .last("LIMIT 1"));
+        return messages.isEmpty() ? null : messages.get(0).getContent();
+    }
+
+    /** 智能体平台登记表：真实可用的创建入口与步骤（上架引导，非 API 集成） */
+    private record Platform(String label, String site, List<String> steps, String tip) {
+    }
+
+    private static final Map<String, Platform> PLATFORMS = Map.of(
+            "coze", new Platform("扣子 Coze", "https://www.coze.cn", List.of(
+                    "打开 coze.cn 并登录，进入工作台",
+                    "点「创建」→「创建智能体」，填写名称与简介",
+                    "把系统提示词完整粘贴到「人设与回复逻辑」输入框",
+                    "右侧预览区实测几轮对话，确认行为符合预期",
+                    "点「发布」，按需勾选扣子商店、微信客服等渠道"),
+                    "国内平台，免费额度充足，支持一键发布到微信/飞书等渠道，推荐首发"),
+            "dify", new Platform("Dify", "https://cloud.dify.ai", List.of(
+                    "打开 cloud.dify.ai（或你的私有化 Dify 控制台）并登录",
+                    "点「创建空白应用」→ 选「聊天助手」",
+                    "把系统提示词粘贴到「编排」页的「系统提示词」框",
+                    "右上角调试预览确认效果后，点「发布」→「运行」",
+                    "如需 API 接入：发布后在「访问 API」页拿到密钥"),
+                    "适合团队私有化部署与 API 深度集成，开源可自建"),
+            "gpts", new Platform("ChatGPT GPTs", "https://chatgpt.com/gpts/editor", List.of(
+                    "打开 chatgpt.com/gpts/editor（需 ChatGPT Plus/Team）",
+                    "点「Create a GPT」，在 Configure 页填写名称与描述",
+                    "把系统提示词完整粘贴到「Instructions」框",
+                    "右侧预览实测后，点「Create」保存并按需公开",
+                    "注意：Instructions 建议用英文提示词时效果更稳，可让我先翻译"),
+                    "面向海外用户与 ChatGPT 生态，支持 GPT 商店分发"),
+            "yuanqi", new Platform("腾讯元器", "https://yuanqi.tencent.com", List.of(
+                    "打开 yuanqi.tencent.com 并用微信/QQ 登录",
+                    "点「创建智能体」，填写名称与头像",
+                    "把系统提示词粘贴到「设定」（详细设定）输入框",
+                    "右侧调试预览确认后，点「发布」",
+                    "可发布到腾讯元器商店、微信生态等渠道"),
+                    "微信生态分发顺畅，适合面向 C 端用户的轻量智能体"),
+            "custom", new Platform("自建 API 接入", "", List.of(
+                    "把系统提示词作为 messages 里 role=system 的内容",
+                    "通过 OpenAI 兼容接口（/chat/completions）调用任意供应商模型",
+                    "下方调用示例可直接改造接入你自己的业务系统",
+                    "用户侧无需任何配置，提示词完全由你的服务端掌控"),
+                    "最灵活：提示词留在你的服务端，前端/小程序/企业系统都能接"));
+
+    private void persistAssistant(Long conversationId, String content) {        if (content == null || content.isBlank()) {
             return;
         }
         Message assistant = new Message();

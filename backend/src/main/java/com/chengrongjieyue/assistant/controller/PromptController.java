@@ -2,14 +2,19 @@ package com.chengrongjieyue.assistant.controller;
 
 import com.chengrongjieyue.assistant.audit.Audit;
 import com.chengrongjieyue.assistant.common.Result;
+import com.chengrongjieyue.assistant.dto.AgentKitRequest;
 import com.chengrongjieyue.assistant.dto.PageQuery;
 import com.chengrongjieyue.assistant.dto.PromptGenerateRequest;
+import com.chengrongjieyue.assistant.dto.PromptOptimizeRequest;
+import com.chengrongjieyue.assistant.dto.PromptTestRequest;
 import com.chengrongjieyue.assistant.security.SecurityUtils;
 import com.chengrongjieyue.assistant.service.ConversationService;
 import com.chengrongjieyue.assistant.service.PromptService;
+import com.chengrongjieyue.assistant.vo.AgentKitVO;
 import com.chengrongjieyue.assistant.vo.ConversationDetailVO;
 import com.chengrongjieyue.assistant.vo.ConversationVersionVO;
 import com.chengrongjieyue.assistant.vo.ConversationVO;
+import com.chengrongjieyue.assistant.vo.PromptTestResult;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +46,45 @@ public class PromptController {
         SseEmitter emitter = new SseEmitter(300_000L);
         promptService.generateStream(SecurityUtils.current().getId(), request.input(), emitter);
         return emitter;
+    }
+
+    /**
+     * 试运行：用生成的提示词跑一段真实测试输入，验证效果
+     */
+    @PostMapping("/test")
+    @Audit(action = "prompt_test", target = "prompt")
+    public Result<PromptTestResult> test(@Valid @RequestBody PromptTestRequest request) {
+        return Result.success(promptService.testRun(SecurityUtils.current().getId(), request));
+    }
+
+    /**
+     * SSE 流式优化迭代：当前版本 + 试运行结果 + 用户反馈 → 下一版提示词
+     */
+    @PostMapping(value = "/optimize", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Audit(action = "prompt_optimize", target = "conversation")
+    public SseEmitter optimize(@Valid @RequestBody PromptOptimizeRequest request) {
+        SseEmitter emitter = new SseEmitter(300_000L);
+        promptService.optimizeStream(SecurityUtils.current().getId(), request, emitter);
+        return emitter;
+    }
+
+    /**
+     * 标记定稿：客户确认当前版本满意
+     */
+    @PostMapping("/{id}/finalize")
+    @Audit(action = "prompt_finalize", target = "conversation")
+    public Result<Void> finalize(@PathVariable Long id) {
+        promptService.finalize(SecurityUtils.current().getId(), id);
+        return Result.success(null);
+    }
+
+    /**
+     * 智能体上架套件：生成目标平台的创建材料（开场白 + 步骤 + 调用示例）
+     */
+    @PostMapping("/agent-kit")
+    @Audit(action = "prompt_agent_kit", target = "prompt")
+    public Result<AgentKitVO> agentKit(@Valid @RequestBody AgentKitRequest request) {
+        return Result.success(promptService.agentKit(SecurityUtils.current().getId(), request));
     }
 
     @GetMapping("/history")

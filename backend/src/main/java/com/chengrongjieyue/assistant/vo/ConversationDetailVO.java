@@ -7,6 +7,7 @@ public record ConversationDetailVO(
         Long id,
         String title,
         String module,
+        Boolean finalized,
         LocalDateTime createdAt,
         List<MessageVO> messages
 ) {

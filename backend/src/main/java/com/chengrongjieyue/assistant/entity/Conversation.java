@@ -21,5 +21,8 @@ public class Conversation {
     /** prompt=提示词生成 requirement=需求助手 */
     private String module;
 
+    /** 提示词工作台：客户已确认定稿 */
+    private Boolean finalized;
+
     private LocalDateTime createdAt;
 }

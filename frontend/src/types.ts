@@ -71,6 +71,18 @@ export interface ConversationVersion {
   snapshot: string
 }
 
+export interface AgentKit {
+  agentName: string
+  systemPrompt: string
+  greeting: string
+  platformKey: string
+  platformLabel: string
+  platformSite: string
+  steps: string[]
+  tip: string
+  callExample: string | null
+}
+
 export interface PageData<T> {
   records: T[]
   total: number

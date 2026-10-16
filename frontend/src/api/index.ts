@@ -1,5 +1,6 @@
 import http from '../utils/request'
 import type {
+  AgentKit,
   Conversation,
   ConversationDetail,
   ConversationVersion,
@@ -43,6 +44,19 @@ export const promptDetail = (id: number) =>
 
 export const promptVersions = (id: number) =>
   http.get(`/prompt/${id}/versions`) as Promise<{ data: ConversationVersion[] }>
+
+export const promptTest = (payload: { prompt: string; testInput: string }) =>
+  http.post('/prompt/test', payload) as Promise<{ data: { output: string; latencyMs: number } }>
+
+export const promptFinalize = (id: number) =>
+  http.post(`/prompt/${id}/finalize`) as Promise<{ data: null }>
+
+export const promptAgentKit = (payload: {
+  prompt: string
+  agentName: string
+  platform: string
+  greeting?: string
+}) => http.post('/prompt/agent-kit', payload) as Promise<{ data: AgentKit }>
 
 export const conversationList = (page: number, size = 20, module?: string) =>
   http.get('/conversations', { params: { page, size, module } }) as Promise<{

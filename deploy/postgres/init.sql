@@ -56,6 +56,7 @@ CREATE TABLE conversations (
     user_id    BIGINT       NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     title      VARCHAR(128) NOT NULL,
     module     VARCHAR(32)  NOT NULL,
+    finalized  BOOLEAN      NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP  NOT NULL DEFAULT now()
 );
 COMMENT ON TABLE conversations IS '会话表：module 区分来源模块';
