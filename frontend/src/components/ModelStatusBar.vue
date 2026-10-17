@@ -116,19 +116,24 @@ async function onSave() {
   }
   saving.value = true
   try {
-    await updateModelConfig({
+    const result: any = await updateModelConfig({
       provider: form.provider,
       baseUrl: form.baseUrl,
       apiKey: form.apiKey || undefined,
       modelName: form.modelName,
       enabled: form.enabled
     })
-    ElMessage.success(t('status.savedEncrypted'))
-    masked.value = '****'
+    // 用服务端回传的掩码回填，让「已保存」看得见（如 ****8fce）
+    const saved = result?.data as ModelConfig | null
+    masked.value = saved?.apiKeyMasked || '****'
     loadedAdminConfig.value = true
     form.apiKey = ''
-    await refresh()
     dialogVisible.value = false
+    await refresh()
+    ElMessage.success(t('status.savedEncrypted'))
+  } catch (e: any) {
+    // 保存失败必须明确报错，不能静默
+    ElMessage.error(e?.response?.data?.message || e?.message || t('status.connFailed'))
   } finally {
     saving.value = false
   }

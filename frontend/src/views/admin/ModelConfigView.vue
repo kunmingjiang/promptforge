@@ -60,6 +60,9 @@ async function onSave() {
     const result: any = await getModelConfig()
     masked.value = (result.data as ModelConfig)?.apiKeyMasked || ''
     form.apiKey = ''
+  } catch (e: any) {
+    // 保存失败必须明确报错，不能静默
+    ElMessage.error(e?.response?.data?.message || e?.message || t('admin.connFailed'))
   } finally {
     saving.value = false
   }
