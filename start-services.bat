@@ -27,14 +27,14 @@ if not defined DB_HOST set DB_HOST=127.0.0.1
 if not defined DB_PORT set DB_PORT=5432
 
 echo [1/2] Starting backend (port 8080)...
-start "PromptForge-backend" /MIN "%JAVA_HOME%\bin\java.exe" -jar "%BASE%backend\target\ai-assistant-1.0.0.jar" --server.port=8080
+start "PromptForge-backend" /MIN cmd /c ""%JAVA_HOME%\bin\java.exe" -jar "%BASE%backend\target\ai-assistant-1.0.0.jar" --server.port=8080 > "%BASE%backend\backend-run.log" 2>&1"
 
 echo [2/2] Starting frontend (port 5173)...
-cd /d "%BASE%frontend"
-start "PromptForge-frontend" /MIN cmd /c "npm run dev"
+start "PromptForge-frontend" /MIN cmd /c "cd /d "%BASE%frontend" && npm run dev > "%BASE%frontend\frontend-run.log" 2>&1"
 
 echo.
-echo Done. Open http://localhost:5173 in your browser.
+echo Done. Open http://localhost:5173 in your browser (wait ~30s for backend boot).
 echo Admin: %ADMIN_USERNAME% / the password you set in .env.local
+echo Backend log: backend\backend-run.log   Frontend log: frontend\frontend-run.log
 echo To stop: run stop-services.bat
 pause

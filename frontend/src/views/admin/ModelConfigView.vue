@@ -22,6 +22,9 @@ const testResult = ref<ModelConfigTestResult | null>(null)
 
 const preset = computed(() => PROVIDERS[form.provider] || PROVIDERS.custom)
 
+/** 防 Edge/Chrome 把 API Key 框当密码框自动填充：渲染时只读，聚焦才解锁 */
+const keyReadonly = ref(true)
+
 /** 切换供应商：自动填充该家的 Base URL 与默认模型名 */
 watch(() => form.provider, () => {
   form.baseUrl = preset.value.baseUrl
@@ -130,6 +133,9 @@ async function onTest() {
             show-password
             autocomplete="new-password"
             name="pf-api-key"
+            :readonly="keyReadonly"
+            @focus="keyReadonly = false"
+            @blur="keyReadonly = true"
             :placeholder="masked ? t('admin.keyKeepOriginal') : (preset.siteName ? t('admin.keyCreatedAt', { site: preset.siteName }) : 'sk-...')"
           />
         </el-form-item>

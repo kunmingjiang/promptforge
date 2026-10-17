@@ -36,6 +36,9 @@ const form = reactive({
 })
 
 const preset = computed(() => PROVIDERS[form.provider] || PROVIDERS.custom)
+
+/** 防 Edge/Chrome 把 API Key 框当密码框自动填充：渲染时只读，聚焦才解锁 */
+const keyReadonly = ref(true)
 const ready = computed(() => !!status.value?.configured)
 const statusText = computed(() => {
   if (ready.value) {
@@ -213,6 +216,9 @@ refresh()
             show-password
             autocomplete="new-password"
             name="pf-api-key"
+            :readonly="keyReadonly"
+            @focus="keyReadonly = false"
+            @blur="keyReadonly = true"
             :placeholder="masked ? t('admin.keyKeepOriginal') : (preset.siteName ? t('admin.keyCreatedAt', { site: preset.siteName }) : 'sk-...')"
           />
         </el-form-item>
