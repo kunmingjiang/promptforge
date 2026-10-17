@@ -44,7 +44,15 @@ Two entry points, one prompt-processing core:
 
 ## 🖼️ Screenshots
 
-> Screenshots will be added to `docs/screenshots/` before the first release (login / workbench / prompt studio / requirements assistant).
+| Login | Workbench |
+| --- | --- |
+| ![Login](docs/screenshots/login.png) | ![Home](docs/screenshots/home.png) |
+| **Prompt Studio (input left · four-tab workbench right)** | **Requirements Assistant (3-step clarify wizard)** |
+| ![Prompt Studio](docs/screenshots/prompt.png) | ![Requirements](docs/screenshots/requirement.png) |
+| **Conversation History (full version traceability)** | |
+| ![History](docs/screenshots/history.png) | |
+
+> Light sky-blue gradient design system with one-click zh/en switching.
 
 ## 🏗️ Architecture
 
@@ -94,6 +102,8 @@ flowchart LR
 
 ## 🚀 Quick Start
 
+> 🌐 **Live demo**: a public demo site is on the way. Meanwhile, Docker Compose gets you a private instance in ~3 minutes — the best way to experience a self-hosted tool anyway.
+
 ### Option 1: Docker Compose (recommended)
 
 Prerequisites: Docker 20.10+ and Docker Compose v2.
@@ -107,15 +117,20 @@ cd promptforge
 cp .env.example .env
 vi .env
 
-# 3. Start the 5-service stack (postgres / redis / backend / frontend / nginx)
-docker compose up -d
+# 3. Start the stack (postgres / backend / frontend / nginx, images are built locally)
+docker compose up -d --build
 
-# 4. Open http://localhost and sign in with the admin account from .env
+# 4. Check status
+docker compose ps
+docker compose logs -f backend   # wait for "Started AssistantApplication"
+
+# 5. Open http://localhost, sign in with the admin account from .env,
+#    then configure your provider under "Model Config"
 ```
 
 ### Option 2: Manual deployment (no Docker)
 
-Prerequisites: JDK 17+, Node.js 18+, PostgreSQL 15.
+Prerequisites: JDK 17+, Node.js 18+, PostgreSQL 15, Maven 3.9+.
 
 ```bash
 # 1. Initialize the database (role + database + 12 tables)
@@ -125,17 +140,43 @@ psql -U promptforge -d promptforge -f deploy/postgres/init.sql
 
 # 2. Build the backend
 cd backend
-./mvnw -DskipTests package   # or: mvn -DskipTests package
+mvn -DskipTests package          # output: target/ai-assistant-1.0.0.jar
 
-# 3. Start the backend (env vars listed below)
+# 3. Start the backend (pass env vars via export or program args, see table below)
+export DB_PASSWORD=your_password JWT_SECRET=<openssl rand -hex 32> \
+       ENCRYPT_KEY=<openssl rand -hex 16> ADMIN_PASSWORD=<your_admin_password>
 java -jar target/ai-assistant-1.0.0.jar --server.port=8080
-# env: DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD / JWT_SECRET / ENCRYPT_KEY / ADMIN_USERNAME / ADMIN_PASSWORD
 
-# 4. Start the frontend
+# 4. Frontend
 cd ../frontend
 npm install
-npm run dev        # dev mode at http://localhost:5173, /api proxied to 8080
-# or production: npm run build and serve dist/ with any static server
+
+# Dev mode (proxies /api -> 8080), best for local trial
+npm run dev                      # http://localhost:5173
+
+# Production: build static files and serve them with Nginx
+npm run build                    # output: dist/
+```
+
+**Serving the frontend in production** (Nginx example — SSE requires buffering disabled):
+
+```nginx
+server {
+    listen 80;
+    root /var/www/promptforge;          # frontend dist/ directory
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;   # SPA history routing
+    }
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_buffering off;                # required for SSE streaming
+        proxy_read_timeout 300s;
+    }
+}
 ```
 
 > On Windows, use the bundled `start-services.bat` / `stop-services.bat` for one-click local start/stop (secrets are read from the git-ignored `.env.local`).
@@ -180,21 +221,20 @@ promptforge/
 │  ├─ nginx/nginx.conf          # Reverse proxy + SSE passthrough (proxy_buffering off)
 │  └─ postgres/init.sql         # Full DDL for 12 tables + seed data
 ├─ docs/                        # Chinese manuals: operation guide & deployment acceptance
-├─ docker-compose.yml           # postgres / redis / backend / frontend / nginx
+├─ docker-compose.yml           # postgres / backend / frontend / nginx
 ├─ start-services.bat           # Windows one-click start/stop (reads .env.local)
 └─ .env.example
 ```
 
 ## 🗺️ Roadmap
 
-- [x] Multi-provider LLM support (DeepSeek / GLM / Kimi / MiniMax / custom)
+- [x] Multi-provider LLM support (DeepSeek / GLM / Kimi / MiniMax / OpenAI / Claude / Gemini / custom)
 - [x] Prompt Studio + Requirements Assistant
 - [x] SSE streaming + version management
 - [x] Full prompt lifecycle: test-run / iterate / finalize / agent publishing kit
 - [ ] **Artifact wizard**: one-click generation of Skill / MCP / Tool / Workflow / CLI artifacts with publishing guides
 - [ ] Team prompt template marketplace
-- [ ] Native provider adapters (Anthropic / local Ollama inference)
-- [ ] English UI
+- [ ] Public demo site
 
 > Want a feature? [Open an issue](../../issues) or send a PR.
 

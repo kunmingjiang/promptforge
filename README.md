@@ -38,12 +38,20 @@
 - ⚡ **流式体验**：SSE 逐字输出，Nginx 反代已关闭缓冲，部署即可用
 - 🕘 **版本可回溯**：每次生成自动落版本，随时切换对比
 - 🎨 **精致 UI**：浅色天空蓝渐变设计系统，白色毛玻璃卡片，基准 16px 大字号
-- 🐳 **一键部署**：Docker Compose 五个服务编排，`cp .env.example .env && docker compose up -d` 即起
+- 🐳 **一键部署**：Docker Compose 四服务编排（postgres / backend / frontend / nginx），`cp .env.example .env && docker compose up -d --build` 即起
 - 🧩 **可扩展**：`LlmProvider` 接口预留扩展位，接入非 OpenAI 兼容协议只需新增一个实现类
 
 ## 🖼️ 截图
 
-> 截图将于首个 Release 前补充至 `docs/screenshots/`（登录页 / 工作台 / 提示词生成 / 需求助手）。
+| 登录页 | 工作台首页 |
+| --- | --- |
+| ![登录页](docs/screenshots/login.png) | ![首页](docs/screenshots/home.png) |
+| **提示词生成（左侧输入 · 右侧四标签工作台）** | **需求助手（澄清问答三步向导）** |
+| ![提示词生成](docs/screenshots/prompt.png) | ![需求助手](docs/screenshots/requirement.png) |
+| **对话历史（全量版本可回溯）** | |
+| ![对话历史](docs/screenshots/history.png) | |
+
+> 界面为浅色天空蓝渐变设计系统，支持中英文一键切换。
 
 ## 🏗️ 架构
 
@@ -93,6 +101,8 @@ flowchart LR
 
 ## 🚀 快速开始
 
+> 🌐 **在线体验**：公共 Demo 站点筹备中，敬请期待。在那之前，Docker Compose 三分钟就能在本机跑起来——这也是自部署项目最好的体验方式。
+
 ### 方式一：Docker Compose 一键部署（推荐）
 
 前置要求：Docker 20.10+ 与 Docker Compose v2。
@@ -106,15 +116,19 @@ cd promptforge
 cp .env.example .env
 vi .env
 
-# 3. 一键启动（5 个服务：postgres / redis / backend / frontend / nginx）
-docker compose up -d
+# 3. 一键启动（4 个服务：postgres / backend / frontend / nginx，含前后端镜像构建）
+docker compose up -d --build
 
-# 4. 打开 http://localhost ，用 .env 里的管理员账号登录
+# 4. 查看构建与启动状态
+docker compose ps
+docker compose logs -f backend   # 看到 "Started AssistantApplication" 即启动完成
+
+# 5. 打开 http://localhost ，用 .env 里的管理员账号登录 → 左侧「模型配置」填入 API Key 即可使用
 ```
 
 ### 方式二：手动部署（不使用 Docker）
 
-前置要求：JDK 17+、Node.js 18+、PostgreSQL 15。
+前置要求：JDK 17+、Node.js 18+、PostgreSQL 15、Maven 3.9+。
 
 ```bash
 # 1. 初始化数据库（创建角色与库，灌入 12 张表）
@@ -124,18 +138,43 @@ psql -U promptforge -d promptforge -f deploy/postgres/init.sql
 
 # 2. 编译后端
 cd backend
-./mvnw -DskipTests package   # 或 mvn -DskipTests package
+mvn -DskipTests package          # 产物：target/ai-assistant-1.0.0.jar
 
-# 3. 启动后端（环境变量见下方表格）
-java -jar target/ai-assistant-1.0.0.jar \
-  --server.port=8080 \
-  # 或通过环境变量：DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD / JWT_SECRET / ENCRYPT_KEY / ADMIN_USERNAME / ADMIN_PASSWORD
+# 3. 启动后端（环境变量通过 export 或启动参数传入，见下方表格）
+export DB_PASSWORD=your_password JWT_SECRET=<openssl rand -hex 32> \
+       ENCRYPT_KEY=<openssl rand -hex 16> ADMIN_PASSWORD=<your_admin_password>
+java -jar target/ai-assistant-1.0.0.jar --server.port=8080
 
-# 4. 启动前端
+# 4. 前端
 cd ../frontend
 npm install
-npm run dev        # 开发模式，http://localhost:5173，已代理 /api → 8080
-# 或生产模式：npm run build 后将 dist/ 交给任意静态服务器
+
+# 开发模式（自带代理 /api → 8080），适合本地试用
+npm run dev                      # http://localhost:5173
+
+# 生产模式：构建静态文件，交给 Nginx 托管
+npm run build                    # 产物：dist/
+```
+
+**生产环境前端托管**（Nginx 示例，注意 SSE 必须关闭缓冲）：
+
+```nginx
+server {
+    listen 80;
+    root /var/www/promptforge;          # 前端 dist/ 目录
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;   # SPA history 路由
+    }
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_buffering off;                # SSE 流式输出必需
+        proxy_read_timeout 300s;
+    }
+}
 ```
 
 > Windows 本地开发可使用仓库附带的 `start-services.bat` / `stop-services.bat` 一键启停（密钥从 git-ignored 的 `.env.local` 读取）。
@@ -184,20 +223,21 @@ promptforge/
 ├─ docs/
 │  ├─ 操作手册.md               # 各供应商注册/建 Key 教程 + 常见错误
 │  └─ 启动与验收.md             # 部署步骤 + 验收清单
-├─ docker-compose.yml           # postgres / redis / backend / frontend / nginx
+├─ docker-compose.yml           # postgres / backend / frontend / nginx
 ├─ start-services.bat           # Windows 本地一键启停（读 .env.local）
 └─ .env.example
 ```
 
 ## 🗺️ Roadmap
 
-- [x] 多供应商模型适配（DeepSeek / GLM / Kimi / MiniMax / 自定义）
+- [x] 多供应商模型适配（DeepSeek / GLM / Kimi / MiniMax / OpenAI / Claude / Gemini / 自定义）
 - [x] 提示词生成 + 需求助手双入口
 - [x] SSE 流式输出 + 版本管理
+- [x] 提示词全流程闭环：试运行 → 优化迭代 → 定稿 → 智能体上架材料包
+- [x] 界面中英文切换（README 中英双语）
 - [ ] **产物向导**：一键生成 Skill / MCP / Tool / Workflow / CLI 六类 AI 产物并引导上架到自有 AI 平台
 - [ ] 提示词模板市场（团队内共享）
-- [ ] 更多供应商原生适配（Anthropic / Ollama 本地推理）
-- [ ] 英文界面
+- [ ] 公共 Demo 站点
 
 > 有想要的功能？欢迎 [提 Issue](../../issues) 或直接 PR。
 

@@ -32,6 +32,14 @@ router.beforeEach(async (to) => {
   if (to.meta.requiresAuth && !auth.isLoggedIn) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
+  // token 仍在但用户信息缺失（如浏览器恢复会话）时补拉一次
+  if (to.meta.requiresAuth && !auth.user) {
+    try {
+      await auth.fetchMe()
+    } catch {
+      /* 拉取失败不阻断导航，页面按未取到用户信息渲染 */
+    }
+  }
   if (to.meta.requiresAdmin) {
     if (!auth.user) await auth.fetchMe()
     if (!auth.isAdmin) return { name: 'home' }
