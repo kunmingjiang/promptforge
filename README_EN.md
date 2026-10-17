@@ -42,17 +42,28 @@ Two entry points, one prompt-processing core:
 - 🐳 **One-command deploy** — five-service Docker Compose stack: `cp .env.example .env && docker compose up -d`
 - 🧩 **Extensible** — the `LlmProvider` interface leaves room for non-OpenAI-compatible protocols; just add one implementation class
 
-## 🖼️ Screenshots
+## 🔄 Full Prompt Lifecycle
 
-| Login | Workbench |
+PromptForge is more than a one-shot generator — it treats a prompt as a deliverable with a full lifecycle:
+
+```mermaid
+flowchart LR
+    A["① Generate<br/>structured prompt"] --> B["② Test-run<br/>against a real model"]
+    B --> C["③ Iterate<br/>quick-fix directions"]
+    C --> D["④ Finalize<br/>lock the final version"]
+    D --> E["⑤ Publish<br/>agent kit export"]
+    C -.->|keep iterating| B
+```
+
+| Stage | What you do |
 | --- | --- |
-| ![Login](docs/screenshots/login.png) | ![Home](docs/screenshots/home.png) |
-| **Prompt Studio (input left · four-tab workbench right)** | **Requirements Assistant (3-step clarify wizard)** |
-| ![Prompt Studio](docs/screenshots/prompt.png) | ![Requirements](docs/screenshots/requirement.png) |
-| **Conversation History (full version traceability)** | |
-| ![History](docs/screenshots/history.png) | |
+| **① Generate** | Describe your need in plain words; a structured prompt (role / skills / constraints) streams in via SSE |
+| **② Test-run** | Run the prompt against your configured model and see the real output — flaws surface immediately |
+| **③ Iterate** | Pick a direction ("more concise", "stricter", "add examples"…) and let AI revise in-conversation, with full version history |
+| **④ Finalize** | Lock the satisfying version as final so it can't be accidentally changed |
+| **⑤ Publish** | Auto-package the system prompt, opening line, and model params into an agent kit — ready to paste into Coze / Dify / GPTs and more |
 
-> Light sky-blue gradient design system with one-click zh/en switching.
+> Check, test, refine, deliver — four tabs on one page, no copy-pasting between tools.
 
 ## 🏗️ Architecture
 
@@ -110,7 +121,7 @@ Prerequisites: Docker 20.10+ and Docker Compose v2.
 
 ```bash
 # 1. Clone
-git clone https://github.com/<your-org>/promptforge.git
+git clone https://github.com/kunmingjiang/promptforge.git
 cd promptforge
 
 # 2. Prepare env vars (MUST change JWT_SECRET / ENCRYPT_KEY / DB_PASSWORD / ADMIN_PASSWORD)

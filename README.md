@@ -36,22 +36,34 @@
 - 🔌 **多模型供应商**：DeepSeek / 智谱 GLM / Kimi (Moonshot) / MiniMax / OpenAI / Claude / Gemini / 自定义 OpenAI 兼容网关（OneAPI、NewAPI、vLLM…），后台下拉切换，业务代码零改动
 - 🔐 **企业级安全**：API Key AES-256-GCM 加密落库（接口只回显末 4 位）、BCrypt 密码、JWT 双令牌、登录失败锁定、按用户限流、全量审计日志
 - ⚡ **流式体验**：SSE 逐字输出，Nginx 反代已关闭缓冲，部署即可用
+- 🔄 **全流程闭环**：生成 → 试运行 → 优化迭代 → 定稿 → 智能体上架材料包，一个提示词的完整生命周期
 - 🕘 **版本可回溯**：每次生成自动落版本，随时切换对比
 - 🎨 **精致 UI**：浅色天空蓝渐变设计系统，白色毛玻璃卡片，基准 16px 大字号
 - 🐳 **一键部署**：Docker Compose 四服务编排（postgres / backend / frontend / nginx），`cp .env.example .env && docker compose up -d --build` 即起
 - 🧩 **可扩展**：`LlmProvider` 接口预留扩展位，接入非 OpenAI 兼容协议只需新增一个实现类
 
-## 🖼️ 截图
+## 🔄 提示词全流程闭环
 
-| 登录页 | 工作台首页 |
+PromptForge 不止「生成一次就完」——它把提示词当成一个有生命周期的交付物来管理：
+
+```mermaid
+flowchart LR
+    A["① 生成<br/>结构化提示词"] --> B["② 试运行<br/>真实模型检验效果"]
+    B --> C["③ 优化迭代<br/>按方向快速改稿"]
+    C --> D["④ 定稿<br/>锁定最终版本"]
+    D --> E["⑤ 创建智能体<br/>上架材料包一键导出"]
+    C -.->|继续迭代| B
+```
+
+| 阶段 | 你能做什么 |
 | --- | --- |
-| ![登录页](docs/screenshots/login.png) | ![首页](docs/screenshots/home.png) |
-| **提示词生成（左侧输入 · 右侧四标签工作台）** | **需求助手（澄清问答三步向导）** |
-| ![提示词生成](docs/screenshots/prompt.png) | ![需求助手](docs/screenshots/requirement.png) |
-| **对话历史（全量版本可回溯）** | |
-| ![对话历史](docs/screenshots/history.png) | |
+| **① 生成** | 输入大白话需求，SSE 流式产出角色 / 技能 / 约束齐全的结构化提示词 |
+| **② 试运行** | 用当前配置的模型直接跑这条提示词，看真实输出效果，不满意立刻暴露 |
+| **③ 优化迭代** | 选择「更简洁 / 更严谨 / 补充示例…」等优化方向，AI 在对话中改稿，版本全程留痕 |
+| **④ 定稿** | 满意后一键定稿，标记为最终版本，避免误改 |
+| **⑤ 创建智能体** | 自动打包系统提示词、开场白、模型参数等上架材料，直接拿去 Coze / Dify / GPTs 等平台创建智能体 |
 
-> 界面为浅色天空蓝渐变设计系统，支持中英文一键切换。
+> 检查、测试、完善、交付——一个页面四个标签全部完成，无需在多个工具间来回拷贝。
 
 ## 🏗️ 架构
 
@@ -109,7 +121,7 @@ flowchart LR
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/<your-org>/promptforge.git
+git clone https://github.com/kunmingjiang/promptforge.git
 cd promptforge
 
 # 2. 准备环境变量（必须修改 JWT_SECRET / ENCRYPT_KEY / DB_PASSWORD / ADMIN_PASSWORD）
