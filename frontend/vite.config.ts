@@ -12,5 +12,17 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        // 大依赖手动分包：避免单个主 chunk 过大，利于浏览器并行加载与长缓存
+        manualChunks: {
+          'vendor-vue': ['vue', 'vue-router', 'pinia', 'vue-i18n'],
+          'vendor-element': ['element-plus', '@element-plus/icons-vue'],
+          'vendor-marked': ['marked']
+        }
+      }
+    }
   }
 })
