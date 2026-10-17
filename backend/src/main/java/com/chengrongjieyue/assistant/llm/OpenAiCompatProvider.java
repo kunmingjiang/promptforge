@@ -16,6 +16,7 @@ import org.springframework.web.client.RestClientResponseException;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -141,8 +142,19 @@ public class OpenAiCompatProvider implements LlmProvider {
     }
 
     private Map<String, Object> buildBody(LlmRequest request, boolean stream) {
-        List<Map<String, String>> messages = request.messages().stream()
-                .map(m -> Map.of("role", m.role(), "content", m.content()))
+        List<Object> messages = request.messages().stream()
+                .<Object>map(m -> {
+                    if (m.hasImages()) {
+                        // OpenAI 多模态格式：content 为 text + image_url 数组
+                        List<Object> parts = new ArrayList<>();
+                        parts.add(Map.of("type", "text", "text", m.content() == null ? "" : m.content()));
+                        for (String url : m.images()) {
+                            parts.add(Map.of("type", "image_url", "image_url", Map.of("url", url)));
+                        }
+                        return Map.<String, Object>of("role", m.role(), "content", parts);
+                    }
+                    return Map.<String, Object>of("role", m.role(), "content", m.content() == null ? "" : m.content());
+                })
                 .toList();
         Map<String, Object> body = new HashMap<>();
         body.put("model", request.model());

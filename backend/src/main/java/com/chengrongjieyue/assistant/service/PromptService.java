@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.chengrongjieyue.assistant.common.BizException;
 import com.chengrongjieyue.assistant.common.ErrorCode;
 import com.chengrongjieyue.assistant.dto.PromptOptimizeRequest;
+import com.chengrongjieyue.assistant.dto.PromptClarifyRequest;
+import com.chengrongjieyue.assistant.dto.PromptGenerateRequest;
 import com.chengrongjieyue.assistant.dto.PromptSelfCheckRequest;
 import com.chengrongjieyue.assistant.dto.PromptTestRequest;
 import com.chengrongjieyue.assistant.dto.AgentKitRequest;
@@ -63,6 +65,23 @@ public class PromptService {
             不要粉饰，发现问题直说；输出使用简体中文 Markdown。
             """;
 
+    /** 用户附图时的补充指令：流程图 / 草图 / 设计稿要读进提示词里 */
+    private static final String VISION_APPENDIX = """
+            4. 用户可能随文附上图片（流程图、草图、界面设计稿、表格截图等）：
+               先仔细读图，把图中体现的业务流程、模块结构、字段与交互纳入提示词；
+               图与文字冲突时以文字为准，并在提示词的约束条件里注明你的取舍。
+            """;
+
+    private static final String CLARIFY_PROMPT = """
+            你是一名资深的 AI 提示词工程师。用户给你的需求描述可能非常零散、口语化，
+            甚至他自己也说不清楚想要什么。你的任务是找出「生成高质量提示词所必需、
+            但用户没有讲清楚」的关键信息，提出最多 3 个澄清问题。
+            要求：
+            1. 只问最关键的，能靠合理默认值补齐的不要问；
+            2. 每个问题一句话，具体、好回答，必要时给出选项示例；
+            3. 只输出一个 JSON 字符串数组，例如 ["问题1","问题2"]，不要输出其他任何内容。
+            """;
+
     private final ConversationMapper conversationMapper;
     private final MessageMapper messageMapper;
     private final ConversationVersionMapper versionMapper;
@@ -90,7 +109,9 @@ public class PromptService {
         this.llmExecutor = llmExecutor;
     }
 
-    public void generateStream(Long userId, String input, SseEmitter emitter) {
+    public void generateStream(Long userId, PromptGenerateRequest request, SseEmitter emitter) {
+        String input = request.input();
+        List<String> images = sanitizeImages(request.images());
         if (!rateLimitService.tryAcquire(userId)) {
             sendError(emitter, "请求过于频繁，每分钟最多发起 10 次生成，请稍后再试");
             emitter.complete();
@@ -119,7 +140,8 @@ public class PromptService {
 
         LlmProvider provider = providerFactory.get(config.getProvider());
         LlmRequest llmRequest = modelConfigService.buildLlmRequest(config,
-                List.of(new LlmMessage("system", SYSTEM_PROMPT), new LlmMessage("user", input)), true);
+                List.of(new LlmMessage("system", images.isEmpty() ? SYSTEM_PROMPT : SYSTEM_PROMPT + VISION_APPENDIX),
+                        new LlmMessage("user", input, images)), true);
         Long conversationId = conversation.getId();
 
         llmExecutor.execute(() -> provider.chatStream(llmRequest, new LlmStreamCallback() {
@@ -146,6 +168,63 @@ public class PromptService {
                 emitter.complete();
             }
         }));
+    }
+
+    /**
+     * 澄清梳理：需求零散、用户自己也说不清时，让 AI 先提最多 3 个关键澄清问题，
+     * 用户回答后再带着完整信息去生成。不落库，轻量临时调用
+     */
+    public List<String> clarify(Long userId, PromptClarifyRequest request) {
+        if (!rateLimitService.tryAcquire(userId)) {
+            throw new BizException(ErrorCode.RATE_LIMITED, "请求过于频繁，请稍后再试");
+        }
+        ModelConfig config = modelConfigService.getActive();
+        List<String> images = sanitizeImages(request.images());
+        LlmRequest llmRequest = modelConfigService.buildLlmRequest(config,
+                List.of(new LlmMessage("system", CLARIFY_PROMPT),
+                        new LlmMessage("user", request.input(), images)), false);
+        LlmResponse response = providerFactory.get(config.getProvider()).chat(llmRequest);
+        return parseQuestions(response.content());
+    }
+
+    /** 解析模型返回的澄清问题：优先按 JSON 数组解析，失败则按行拆分兜底 */
+    private List<String> parseQuestions(String content) {
+        if (content == null || content.isBlank()) {
+            return List.of();
+        }
+        String text = content.trim();
+        try {
+            int start = text.indexOf('[');
+            int end = text.lastIndexOf(']');
+            if (start >= 0 && end > start) {
+                List<String> questions = objectMapper.readValue(text.substring(start, end + 1),
+                        objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+                return questions.stream().filter(q -> q != null && !q.isBlank()).limit(3).toList();
+            }
+        } catch (Exception ignored) {
+            // 落入按行兜底
+        }
+        return java.util.Arrays.stream(text.split("\n"))
+                .map(line -> line.replaceAll("^[\\s\\d.、\\-*>]+", "").trim())
+                .filter(line -> line.endsWith("？") || line.endsWith("?") || line.contains("？"))
+                .limit(3)
+                .toList();
+    }
+
+    /** 图片白名单校验：仅 data URL，单张 ≤ 4MB，最多 3 张 */
+    private List<String> sanitizeImages(List<String> images) {
+        if (images == null || images.isEmpty()) {
+            return List.of();
+        }
+        if (images.size() > 3) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "最多上传 3 张图片");
+        }
+        for (String image : images) {
+            if (image == null || !image.startsWith("data:image/") || image.length() > 6 * 1024 * 1024) {
+                throw new BizException(ErrorCode.PARAM_ERROR, "仅支持 4MB 以内的 png / jpg / webp 图片");
+            }
+        }
+        return images;
     }
 
     /**

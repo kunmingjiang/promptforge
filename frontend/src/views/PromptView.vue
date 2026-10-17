@@ -2,8 +2,9 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 import { streamSse } from '../utils/sse'
-import { promptVersions, promptTest, promptSelfCheck, promptFinalize, promptAgentKit } from '../api'
+import { promptVersions, promptTest, promptSelfCheck, promptClarify, promptFinalize, promptAgentKit } from '../api'
 import type { ConversationVersion, AgentKit } from '../types'
 import ModelStatusBar from '../components/ModelStatusBar.vue'
 
@@ -56,8 +57,9 @@ function selectVersion(index: number) {
   output.value = extractPrompt(versions.value[index])
 }
 
-async function generate() {
-  if (!input.value.trim()) {
+async function generate(mergedInput?: string) {
+  const finalInput = (mergedInput ?? input.value).trim()
+  if (!finalInput) {
     ElMessage.warning(t('prompt.warnNeedInput'))
     return
   }
@@ -67,8 +69,12 @@ async function generate() {
   output.value = ''
   savedInfo.value = ''
   activeTab.value = 'result'
+  showClarify.value = false
 
-  await streamSse('/api/prompt/generate', { input: input.value }, {
+  await streamSse('/api/prompt/generate', {
+    input: finalInput,
+    images: imageDataUrls.value.map((i) => i.url)
+  }, {
     onMessage: (delta) => {
       output.value += delta
     },
@@ -84,6 +90,85 @@ async function generate() {
     }
   })
   generating.value = false
+}
+
+/* ============ 散信息梳理：让 AI 先提澄清问题，回答后再生成 ============ */
+const clarifying = ref(false)
+const showClarify = ref(false)
+const questions = ref<string[]>([])
+const clarifyAnswers = ref<Record<number, string>>({})
+
+async function clarify() {
+  if (!input.value.trim()) {
+    ElMessage.warning(t('prompt.warnNeedInput'))
+    return
+  }
+  if (modelBar.value && !(await modelBar.value.ensureReady())) return
+  clarifying.value = true
+  showClarify.value = true
+  questions.value = []
+  clarifyAnswers.value = {}
+  try {
+    const res = await promptClarify({ input: input.value, images: imageDataUrls.value.map((i) => i.url) })
+    questions.value = res.data || []
+    if (!questions.value.length) {
+      ElMessage.info(t('prompt.clarifyEmpty'))
+      showClarify.value = false
+    }
+  } catch (e: unknown) {
+    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+    ElMessage.error(msg || t('prompt.clarifyFailed'))
+    showClarify.value = false
+  } finally {
+    clarifying.value = false
+  }
+}
+
+/** 把澄清问答合并进需求描述，带着完整信息去生成 */
+function generateWithAnswers() {
+  const parts = [input.value.trim()]
+  const answered = questions.value
+    .map((q, i) => ({ q, a: (clarifyAnswers.value[i] || '').trim() }))
+    .filter((x) => x.a)
+  if (answered.length) {
+    parts.push(t('prompt.clarifyMergeTitle'))
+    answered.forEach((x, i) => parts.push(`${i + 1}. 问：${x.q}\n   答：${x.a}`))
+  }
+  void generate(parts.join('\n\n'))
+}
+
+/* ============ 附图：流程图 / 草图 / 设计稿 ============ */
+interface ImageItem { uid: number; url: string }
+const imageDataUrls = ref<ImageItem[]>([])
+
+async function onImageChange(file: { uid: number; raw?: File }) {
+  const raw = file.raw
+  if (!raw) return
+  if (!/^image\/(png|jpe?g|webp)$/i.test(raw.type)) {
+    ElMessage.warning(t('prompt.imageTypeError'))
+    removeImageByUid(file.uid)
+    return
+  }
+  if (raw.size > 4 * 1024 * 1024) {
+    ElMessage.warning(t('prompt.imageSizeError'))
+    removeImageByUid(file.uid)
+    return
+  }
+  const url = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(raw)
+  })
+  imageDataUrls.value.push({ uid: file.uid, url })
+}
+
+function onImageRemove(file: { uid: number }) {
+  removeImageByUid(file.uid)
+}
+
+function removeImageByUid(uid: number) {
+  imageDataUrls.value = imageDataUrls.value.filter((i) => i.uid !== uid)
 }
 
 /* ============ 试运行 ============ */
@@ -286,9 +371,42 @@ function copyOutput() {
             show-word-limit
             :placeholder="t('prompt.inputPlaceholder')"
           />
+          <div class="attach-row">
+            <el-upload
+              class="image-uploader"
+              :auto-upload="false"
+              list-type="picture-card"
+              accept="image/png,image/jpeg,image/webp"
+              :limit="3"
+              :on-change="onImageChange"
+              :on-remove="onImageRemove"
+              :on-exceed="() => ElMessage.warning(t('prompt.imageLimitError'))"
+            >
+              <el-icon><Plus /></el-icon>
+            </el-upload>
+            <div class="attach-tip">{{ t('prompt.attachTip') }}</div>
+          </div>
           <div class="actions">
-            <el-button type="primary" size="large" :loading="generating" @click="generate">{{ t('prompt.generate') }}</el-button>
+            <el-button type="primary" size="large" :loading="generating" @click="generate()">{{ t('prompt.generate') }}</el-button>
+            <el-button size="large" :loading="clarifying" :disabled="generating" @click="clarify">{{ t('prompt.clarifyBtn') }}</el-button>
             <el-button size="large" :disabled="!output" @click="copyOutput">{{ t('prompt.copyResult') }}</el-button>
+          </div>
+          <div v-if="showClarify" class="clarify-panel">
+            <p class="clarify-title">{{ t('prompt.clarifyTitle') }}</p>
+            <div v-for="(q, i) in questions" :key="i" class="clarify-item">
+              <p class="clarify-q">{{ i + 1 }}. {{ q }}</p>
+              <el-input
+                v-model="clarifyAnswers[i]"
+                type="textarea"
+                :rows="2"
+                maxlength="1000"
+                :placeholder="t('prompt.clarifyAnswerPlaceholder')"
+              />
+            </div>
+            <div class="clarify-actions">
+              <el-button type="primary" :loading="generating" @click="generateWithAnswers">{{ t('prompt.generateWithAnswers') }}</el-button>
+              <el-button :disabled="generating" @click="showClarify = false">{{ t('prompt.clarifyCollapse') }}</el-button>
+            </div>
           </div>
           <div v-if="versions.length" class="version-bar">
             <span class="version-label mono-tag">{{ t('prompt.version') }}</span>
@@ -487,6 +605,61 @@ function copyOutput() {
   margin-top: 14px;
   display: flex;
   gap: 12px;
+}
+
+/* 附图上传：小尺寸缩略图卡片 */
+.attach-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.attach-tip {
+  font-size: 13px;
+  color: var(--pf-text-soft, #64748b);
+  line-height: 1.6;
+  padding-top: 4px;
+}
+
+.image-uploader :deep(.el-upload--picture-card) {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+}
+
+.image-uploader :deep(.el-upload-list--picture-card .el-upload-list__item) {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+}
+
+/* 澄清梳理面板 */
+.clarify-panel {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--pf-border, #dbeafe);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.clarify-title {
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.clarify-item {
+  margin-bottom: 12px;
+}
+
+.clarify-q {
+  margin-bottom: 6px;
+  line-height: 1.6;
+}
+
+.clarify-actions {
+  display: flex;
+  gap: 10px;
 }
 
 .version-bar {

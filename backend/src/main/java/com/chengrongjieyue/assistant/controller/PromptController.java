@@ -4,6 +4,7 @@ import com.chengrongjieyue.assistant.audit.Audit;
 import com.chengrongjieyue.assistant.common.Result;
 import com.chengrongjieyue.assistant.dto.AgentKitRequest;
 import com.chengrongjieyue.assistant.dto.PageQuery;
+import com.chengrongjieyue.assistant.dto.PromptClarifyRequest;
 import com.chengrongjieyue.assistant.dto.PromptGenerateRequest;
 import com.chengrongjieyue.assistant.dto.PromptOptimizeRequest;
 import com.chengrongjieyue.assistant.dto.PromptSelfCheckRequest;
@@ -40,13 +41,23 @@ public class PromptController {
 
     /**
      * SSE 流式生成：事件 message（增量）/ done（会话与版本信息）/ error
+     * 支持随文附图（流程图 / 草图 / 设计稿），是否生效取决于模型视觉能力
      */
     @PostMapping(value = "/generate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Audit(action = "prompt_generate", target = "conversation")
     public SseEmitter generate(@Valid @RequestBody PromptGenerateRequest request) {
         SseEmitter emitter = new SseEmitter(300_000L);
-        promptService.generateStream(SecurityUtils.current().getId(), request.input(), emitter);
+        promptService.generateStream(SecurityUtils.current().getId(), request, emitter);
         return emitter;
+    }
+
+    /**
+     * 澄清梳理：需求零散时让 AI 先提最多 3 个澄清问题，回答后再去生成
+     */
+    @PostMapping("/clarify")
+    @Audit(action = "prompt_clarify", target = "prompt")
+    public Result<List<String>> clarify(@Valid @RequestBody PromptClarifyRequest request) {
+        return Result.success(promptService.clarify(SecurityUtils.current().getId(), request));
     }
 
     /**
