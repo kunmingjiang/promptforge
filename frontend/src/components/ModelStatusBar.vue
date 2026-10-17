@@ -211,6 +211,8 @@ refresh()
             v-model="form.apiKey"
             type="password"
             show-password
+            autocomplete="new-password"
+            name="pf-api-key"
             :placeholder="masked ? t('admin.keyKeepOriginal') : (preset.siteName ? t('admin.keyCreatedAt', { site: preset.siteName }) : 'sk-...')"
           />
         </el-form-item>

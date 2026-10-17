@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.chengrongjieyue.assistant.common.BizException;
 import com.chengrongjieyue.assistant.common.ErrorCode;
 import com.chengrongjieyue.assistant.dto.PromptOptimizeRequest;
+import com.chengrongjieyue.assistant.dto.PromptSelfCheckRequest;
 import com.chengrongjieyue.assistant.dto.PromptTestRequest;
 import com.chengrongjieyue.assistant.dto.AgentKitRequest;
 import com.chengrongjieyue.assistant.entity.Conversation;
@@ -51,6 +52,15 @@ public class PromptService {
             1. 只输出提示词本身，不要任何解释或寒暄；
             2. 提示词需包含：角色设定、任务目标、输入说明、输出格式、约束条件；
             3. 使用简体中文。
+            """;
+
+    private static final String SELF_CHECK_PROMPT = """
+            你是一名严格的 AI 提示词评审专家。你会拿到一条提示词、一段测试输入和对应的试运行输出。
+            你的职责是客观评审这条提示词的实际效果，重点是：
+            1. 判断输出是否达成了提示词设定的任务目标；
+            2. 诚实列出你（作为执行该提示词的 AI）不确定、靠假设补齐、或缺少背景信息而无法判断的点，交给人工确认；
+            3. 指出输出缺陷并给出提示词层面的修改建议。
+            不要粉饰，发现问题直说；输出使用简体中文 Markdown。
             """;
 
     private final ConversationMapper conversationMapper;
@@ -147,6 +157,39 @@ public class PromptService {
         LlmRequest llmRequest = modelConfigService.buildLlmRequest(config,
                 List.of(new LlmMessage("system", request.prompt()),
                         new LlmMessage("user", request.testInput())), false);
+        long start = System.currentTimeMillis();
+        LlmResponse response = providerFactory.get(config.getProvider()).chat(llmRequest);
+        return new PromptTestResult(response.content(), System.currentTimeMillis() - start);
+    }
+
+    /**
+     * AI 自检：以独立评审者身份检查「提示词 + 测试输入 + 试运行输出」，
+     * 输出达标判断、AI 不确定需人工确认的点、以及改进建议。
+     * 提示词自身无法发现自己缺失的背景信息，这部分如实列为待人工确认项
+     */
+    public PromptTestResult selfCheck(Long userId, PromptSelfCheckRequest request) {
+        ModelConfig config = modelConfigService.getActive();
+        StringBuilder user = new StringBuilder();
+        user.append("【提示词】\n").append(request.prompt()).append("\n\n");
+        if (request.testInput() != null && !request.testInput().isBlank()) {
+            user.append("【测试输入】\n").append(request.testInput()).append("\n\n");
+        }
+        user.append("【试运行输出】\n").append(request.output()).append("\n\n");
+        user.append("""
+                请以上述材料评审这条提示词的实际效果，严格按以下结构输出（Markdown）：
+                ## 总体判断
+                一句话：输出是否达到提示词预期的任务目标（达标 / 基本达标但有缺陷 / 未达标），并说明理由。
+                ## 需人工确认的点
+                列出你作为 AI 在理解提示词或产出结果时**不确定、依赖假设、或缺少背景信息**的地方，每条格式：
+                - [不确定点] 我的假设是 xxx —— 请人工确认是否正确
+                如果没有不确定点，写「无」。
+                ## 缺陷与改进建议
+                列出输出中的具体缺陷（遗漏、幻觉、格式偏差等）与对应提示词修改建议；没有则写「无」。
+                只输出评审内容，不要寒暄。""");
+
+        LlmRequest llmRequest = modelConfigService.buildLlmRequest(config,
+                List.of(new LlmMessage("system", SELF_CHECK_PROMPT),
+                        new LlmMessage("user", user.toString())), false);
         long start = System.currentTimeMillis();
         LlmResponse response = providerFactory.get(config.getProvider()).chat(llmRequest);
         return new PromptTestResult(response.content(), System.currentTimeMillis() - start);

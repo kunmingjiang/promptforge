@@ -6,6 +6,7 @@ import com.chengrongjieyue.assistant.dto.AgentKitRequest;
 import com.chengrongjieyue.assistant.dto.PageQuery;
 import com.chengrongjieyue.assistant.dto.PromptGenerateRequest;
 import com.chengrongjieyue.assistant.dto.PromptOptimizeRequest;
+import com.chengrongjieyue.assistant.dto.PromptSelfCheckRequest;
 import com.chengrongjieyue.assistant.dto.PromptTestRequest;
 import com.chengrongjieyue.assistant.security.SecurityUtils;
 import com.chengrongjieyue.assistant.service.ConversationService;
@@ -76,6 +77,15 @@ public class PromptController {
     public Result<Void> finalize(@PathVariable Long id) {
         promptService.finalize(SecurityUtils.current().getId(), id);
         return Result.success(null);
+    }
+
+    /**
+     * AI 自检：评审试运行输出，列出 AI 不确定、需人工确认的点与改进建议
+     */
+    @PostMapping("/self-check")
+    @Audit(action = "prompt_self_check", target = "prompt")
+    public Result<PromptTestResult> selfCheck(@Valid @RequestBody PromptSelfCheckRequest request) {
+        return Result.success(promptService.selfCheck(SecurityUtils.current().getId(), request));
     }
 
     /**

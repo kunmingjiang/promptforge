@@ -48,6 +48,9 @@ export const promptVersions = (id: number) =>
 export const promptTest = (payload: { prompt: string; testInput: string }) =>
   http.post('/prompt/test', payload) as Promise<{ data: { output: string; latencyMs: number } }>
 
+export const promptSelfCheck = (payload: { prompt: string; testInput?: string; output: string }) =>
+  http.post('/prompt/self-check', payload) as Promise<{ data: { output: string; latencyMs: number } }>
+
 export const promptFinalize = (id: number) =>
   http.post(`/prompt/${id}/finalize`) as Promise<{ data: null }>
 

@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { streamSse } from '../utils/sse'
-import { promptVersions, promptTest, promptFinalize, promptAgentKit } from '../api'
+import { promptVersions, promptTest, promptSelfCheck, promptFinalize, promptAgentKit } from '../api'
 import type { ConversationVersion, AgentKit } from '../types'
 import ModelStatusBar from '../components/ModelStatusBar.vue'
 
@@ -120,6 +120,32 @@ async function runTest() {
 function goOptimizeWithTestResult() {
   activeTab.value = 'optimize'
   feedback.value = t('prompt.goOptimizeFeedback')
+}
+
+/* ============ AI 自检：评审试运行输出，列出 AI 不确定、需人工确认的点 ============ */
+const selfChecking = ref(false)
+const selfCheckResult = ref('')
+const selfCheckLatency = ref(0)
+
+async function runSelfCheck() {
+  if (!output.value || !testOutput.value) return
+  if (modelBar.value && !(await modelBar.value.ensureReady())) return
+  selfChecking.value = true
+  selfCheckResult.value = ''
+  try {
+    const res = await promptSelfCheck({
+      prompt: output.value,
+      testInput: testInput.value || undefined,
+      output: testOutput.value
+    })
+    selfCheckResult.value = res.data.output
+    selfCheckLatency.value = res.data.latencyMs
+  } catch (e: unknown) {
+    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+    ElMessage.error(msg || t('prompt.selfCheckFailed'))
+  } finally {
+    selfChecking.value = false
+  }
 }
 
 /* ============ 优化迭代 ============ */
@@ -298,7 +324,13 @@ function copyOutput() {
                   >{{ s }}</button>
                 </div>
               </div>
-              <div v-else class="stream-output">{{ output }}<span v-if="generating" class="cursor">▌</span></div>
+              <div v-else class="stream-wrap">
+                <div class="result-head">
+                  <span class="mono-tag">{{ currentVersion ? 'v' + currentVersion.version : '' }}</span>
+                  <el-button size="small" :disabled="!output || generating" @click="copy(output, t('prompt.copiedPrompt'))">{{ t('prompt.copy') }}</el-button>
+                </div>
+                <div class="stream-output">{{ output }}<span v-if="generating" class="cursor">▌</span></div>
+              </div>
               <div v-if="versions.length > 1" class="version-note">
                 {{ t('prompt.versionNote', { current: currentVersion?.version, total: versions.length }) }}
               </div>
@@ -316,13 +348,22 @@ function copyOutput() {
               />
               <div class="tab-actions">
                 <el-button type="primary" :loading="testing" :disabled="!output" @click="runTest">{{ t('prompt.runTest') }}</el-button>
+                <el-button v-if="testOutput" :loading="selfChecking" @click="runSelfCheck">{{ t('prompt.selfCheck') }}</el-button>
                 <el-button v-if="testOutput" @click="goOptimizeWithTestResult">{{ t('prompt.goOptimize') }}</el-button>
               </div>
               <div v-if="testOutput" class="test-result">
                 <div class="result-head">
                   <span class="mono-tag">{{ t('prompt.modelOutput', { ms: testLatency }) }}</span>
+                  <el-button size="small" @click="copy(testOutput, t('prompt.copiedOutput'))">{{ t('prompt.copy') }}</el-button>
                 </div>
                 <div class="test-output">{{ testOutput }}</div>
+              </div>
+              <div v-if="selfCheckResult || selfChecking" class="test-result self-check-card">
+                <div class="result-head">
+                  <span class="mono-tag">{{ t('prompt.selfCheckResult', { ms: selfCheckLatency }) }}</span>
+                  <el-button v-if="selfCheckResult" size="small" @click="copy(selfCheckResult, t('prompt.copied'))">{{ t('prompt.copy') }}</el-button>
+                </div>
+                <div class="test-output">{{ selfCheckResult }}<span v-if="selfChecking" class="cursor">▌</span></div>
               </div>
             </el-tab-pane>
 
@@ -352,7 +393,10 @@ function copyOutput() {
                 <span v-if="testOutput" class="carry-tag">{{ t('prompt.carryTag') }}</span>
               </div>
               <div v-if="optimizePreview" class="test-result">
-                <div class="result-head"><span class="mono-tag">{{ t('prompt.generatingNew') }}</span></div>
+                <div class="result-head">
+                  <span class="mono-tag">{{ t('prompt.generatingNew') }}</span>
+                  <el-button size="small" @click="copy(optimizePreview, t('prompt.copiedPrompt'))">{{ t('prompt.copy') }}</el-button>
+                </div>
                 <div class="test-output">{{ optimizePreview }}<span class="cursor">▌</span></div>
               </div>
             </el-tab-pane>
@@ -606,6 +650,14 @@ function copyOutput() {
 
 .result-head {
   margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stream-wrap .stream-output {
+  margin-top: 0;
 }
 
 .direction-chips {
