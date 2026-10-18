@@ -45,11 +45,18 @@ export const promptDetail = (id: number) =>
 export const promptVersions = (id: number) =>
   http.get(`/prompt/${id}/versions`) as Promise<{ data: ConversationVersion[] }>
 
-export const promptTest = (payload: { prompt: string; testInput: string }) =>
-  http.post('/prompt/test', payload) as Promise<{ data: { output: string; latencyMs: number } }>
+export const promptTest = (payload: {
+  prompt: string
+  testInput?: string
+  history?: { role: string; content: string }[]
+}) => http.post('/prompt/test', payload) as Promise<{ data: { output: string; latencyMs: number } }>
 
-export const promptSelfCheck = (payload: { prompt: string; testInput?: string; output: string }) =>
-  http.post('/prompt/self-check', payload) as Promise<{ data: { output: string; latencyMs: number } }>
+export const promptSelfCheck = (payload: {
+  prompt: string
+  testInput?: string
+  output?: string
+  history?: { role: string; content: string }[]
+}) => http.post('/prompt/self-check', payload) as Promise<{ data: { output: string; latencyMs: number } }>
 
 export const promptClarify = (payload: { input: string; images?: string[] }) =>
   http.post('/prompt/clarify', payload) as Promise<{ data: string[] }>

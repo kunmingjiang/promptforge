@@ -171,11 +171,14 @@ function removeImageByUid(uid: number) {
   imageDataUrls.value = imageDataUrls.value.filter((i) => i.uid !== uid)
 }
 
-/* ============ 试运行 ============ */
+/* ============ 试运行（多轮问答）：模型反问可继续回答，直到满意 ============ */
 const testInput = ref('')
-const testOutput = ref('')
+const testMessages = ref<{ role: 'user' | 'assistant'; content: string }[]>([])
 const testing = ref(false)
 const testLatency = ref(0)
+
+const lastTestUser = computed(() => [...testMessages.value].reverse().find((m) => m.role === 'user')?.content || '')
+const lastTestAssistant = computed(() => [...testMessages.value].reverse().find((m) => m.role === 'assistant')?.content || '')
 
 async function runTest() {
   if (!output.value) {
@@ -189,11 +192,16 @@ async function runTest() {
   }
   if (modelBar.value && !(await modelBar.value.ensureReady())) return
   testing.value = true
-  testOutput.value = ''
   try {
-    const res = await promptTest({ prompt: output.value, testInput: testInput.value })
-    testOutput.value = res.data.output
+    const res = await promptTest({
+      prompt: output.value,
+      testInput: testInput.value.trim(),
+      history: testMessages.value
+    })
+    testMessages.value.push({ role: 'user', content: testInput.value.trim() })
+    testMessages.value.push({ role: 'assistant', content: res.data.output })
     testLatency.value = res.data.latencyMs
+    testInput.value = ''
   } catch (e: unknown) {
     const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
     ElMessage.error(msg || t('prompt.testFailed'))
@@ -202,26 +210,31 @@ async function runTest() {
   }
 }
 
+function clearTest() {
+  testMessages.value = []
+  selfCheckResult.value = ''
+  testInput.value = ''
+}
+
 function goOptimizeWithTestResult() {
   activeTab.value = 'optimize'
   feedback.value = t('prompt.goOptimizeFeedback')
 }
 
-/* ============ AI 自检：评审试运行输出，列出 AI 不确定、需人工确认的点 ============ */
+/* ============ AI 自检：评审整段试运行问答，列出 AI 不确定、需人工确认的点 ============ */
 const selfChecking = ref(false)
 const selfCheckResult = ref('')
 const selfCheckLatency = ref(0)
 
 async function runSelfCheck() {
-  if (!output.value || !testOutput.value) return
+  if (!output.value || !testMessages.value.length) return
   if (modelBar.value && !(await modelBar.value.ensureReady())) return
   selfChecking.value = true
   selfCheckResult.value = ''
   try {
     const res = await promptSelfCheck({
       prompt: output.value,
-      testInput: testInput.value || undefined,
-      output: testOutput.value
+      history: testMessages.value
     })
     selfCheckResult.value = res.data.output
     selfCheckLatency.value = res.data.latencyMs
@@ -243,7 +256,8 @@ const quickDirections = computed(() => [
   t('prompt.direction5'),
   t('prompt.direction6')
 ])
-const optimizeTestOutput = computed(() => (testOutput.value ? testOutput.value : ''))
+const optimizeTestOutput = computed(() => lastTestAssistant.value)
+const optimizeTestInput = computed(() => lastTestUser.value)
 
 async function optimize() {
   if (!conversationId.value) {
@@ -263,7 +277,7 @@ async function optimize() {
   await streamSse('/api/prompt/optimize', {
     conversationId: conversationId.value,
     feedback: feedback.value,
-    testInput: testInput.value || undefined,
+    testInput: optimizeTestInput.value || undefined,
     testOutput: optimizeTestOutput.value || undefined
   }, {
     onMessage: (delta) => {
@@ -454,28 +468,35 @@ function copyOutput() {
               </div>
             </el-tab-pane>
 
-            <!-- 试运行 -->
+            <!-- 试运行（多轮问答） -->
             <el-tab-pane :label="t('prompt.tabTest')" name="test">
               <p class="tab-hint">{{ t('prompt.testHint') }}</p>
+              <div v-if="testMessages.length" class="test-transcript">
+                <template v-for="(m, i) in testMessages" :key="i">
+                  <div v-if="m.role === 'user'" class="test-user-msg">{{ m.content }}</div>
+                  <div v-else class="test-result">
+                    <div class="result-head">
+                      <span class="mono-tag">{{ t('prompt.modelReply') }}</span>
+                      <el-button size="small" @click="copy(m.content, t('prompt.copiedOutput'))">{{ t('prompt.copy') }}</el-button>
+                    </div>
+                    <div class="test-output">{{ m.content }}</div>
+                  </div>
+                </template>
+              </div>
               <el-input
                 v-model="testInput"
                 type="textarea"
                 :rows="3"
                 maxlength="4000"
-                :placeholder="t('prompt.testInputPlaceholder')"
+                :placeholder="testMessages.length ? t('prompt.testReplyPlaceholder') : t('prompt.testInputPlaceholder')"
               />
               <div class="tab-actions">
-                <el-button type="primary" :loading="testing" :disabled="!output" @click="runTest">{{ t('prompt.runTest') }}</el-button>
-                <el-button v-if="testOutput" :loading="selfChecking" @click="runSelfCheck">{{ t('prompt.selfCheck') }}</el-button>
-                <el-button v-if="testOutput" @click="goOptimizeWithTestResult">{{ t('prompt.goOptimize') }}</el-button>
+                <el-button type="primary" :loading="testing" :disabled="!output || !testInput.trim()" @click="runTest">{{ t('prompt.testSend') }}</el-button>
+                <el-button v-if="testMessages.length" :loading="selfChecking" @click="runSelfCheck">{{ t('prompt.selfCheck') }}</el-button>
+                <el-button v-if="testMessages.length" @click="goOptimizeWithTestResult">{{ t('prompt.goOptimize') }}</el-button>
+                <el-button v-if="testMessages.length" @click="clearTest">{{ t('prompt.testClear') }}</el-button>
               </div>
-              <div v-if="testOutput" class="test-result">
-                <div class="result-head">
-                  <span class="mono-tag">{{ t('prompt.modelOutput', { ms: testLatency }) }}</span>
-                  <el-button size="small" @click="copy(testOutput, t('prompt.copiedOutput'))">{{ t('prompt.copy') }}</el-button>
-                </div>
-                <div class="test-output">{{ testOutput }}</div>
-              </div>
+              <div v-if="testMessages.length" class="latency-note mono-tag">{{ t('prompt.modelOutput', { ms: testLatency }) }}</div>
               <div v-if="selfCheckResult || selfChecking" class="test-result self-check-card">
                 <div class="result-head">
                   <span class="mono-tag">{{ t('prompt.selfCheckResult', { ms: selfCheckLatency }) }}</span>
@@ -508,7 +529,7 @@ function copyOutput() {
                 <el-button type="primary" :loading="optimizing" :disabled="!conversationId" @click="optimize">
                   {{ t('prompt.generateNext') }}
                 </el-button>
-                <span v-if="testOutput" class="carry-tag">{{ t('prompt.carryTag') }}</span>
+                <span v-if="testMessages.length" class="carry-tag">{{ t('prompt.carryTag') }}</span>
               </div>
               <div v-if="optimizePreview" class="test-result">
                 <div class="result-head">
@@ -831,6 +852,31 @@ function copyOutput() {
 
 .stream-wrap .stream-output {
   margin-top: 0;
+}
+
+/* 多轮问答记录 */
+.test-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.test-user-msg {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 8px 14px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--pf-accent-soft, #e0f2fe);
+  color: var(--pf-text, #0e2a4d);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.latency-note {
+  margin-top: 10px;
+  opacity: 0.75;
 }
 
 .direction-chips {

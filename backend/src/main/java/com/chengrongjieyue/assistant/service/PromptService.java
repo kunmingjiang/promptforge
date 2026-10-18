@@ -8,6 +8,7 @@ import com.chengrongjieyue.assistant.dto.PromptClarifyRequest;
 import com.chengrongjieyue.assistant.dto.PromptGenerateRequest;
 import com.chengrongjieyue.assistant.dto.PromptSelfCheckRequest;
 import com.chengrongjieyue.assistant.dto.PromptTestRequest;
+import com.chengrongjieyue.assistant.dto.TestTurn;
 import com.chengrongjieyue.assistant.dto.AgentKitRequest;
 import com.chengrongjieyue.assistant.entity.Conversation;
 import com.chengrongjieyue.assistant.entity.ConversationVersion;
@@ -32,6 +33,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -232,10 +234,23 @@ public class PromptService {
      * 不落库——试运行只是临时验证，审计由切面记录
      */
     public PromptTestResult testRun(Long userId, PromptTestRequest request) {
+        List<LlmMessage> messages = new ArrayList<>();
+        messages.add(new LlmMessage("system", request.prompt()));
+        if (request.history() != null) {
+            for (TestTurn turn : request.history()) {
+                messages.add(new LlmMessage("assistant".equalsIgnoreCase(turn.role()) ? "assistant" : "user",
+                        turn.content()));
+            }
+        }
+        if (request.testInput() != null && !request.testInput().isBlank()) {
+            messages.add(new LlmMessage("user", request.testInput()));
+        }
+        if (messages.size() < 2 || "assistant".equalsIgnoreCase(
+                messages.get(messages.size() - 1).role())) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "请输入本轮测试内容");
+        }
         ModelConfig config = modelConfigService.getActive();
-        LlmRequest llmRequest = modelConfigService.buildLlmRequest(config,
-                List.of(new LlmMessage("system", request.prompt()),
-                        new LlmMessage("user", request.testInput())), false);
+        LlmRequest llmRequest = modelConfigService.buildLlmRequest(config, messages, false);
         long start = System.currentTimeMillis();
         LlmResponse response = providerFactory.get(config.getProvider()).chat(llmRequest);
         return new PromptTestResult(response.content(), System.currentTimeMillis() - start);
@@ -250,10 +265,18 @@ public class PromptService {
         ModelConfig config = modelConfigService.getActive();
         StringBuilder user = new StringBuilder();
         user.append("【提示词】\n").append(request.prompt()).append("\n\n");
-        if (request.testInput() != null && !request.testInput().isBlank()) {
-            user.append("【测试输入】\n").append(request.testInput()).append("\n\n");
+        if (request.history() != null && !request.history().isEmpty()) {
+            user.append("【试运行问答记录】\n");
+            for (TestTurn turn : request.history()) {
+                user.append("assistant".equalsIgnoreCase(turn.role()) ? "AI：" : "用户：")
+                        .append(turn.content()).append("\n\n");
+            }
+        } else {
+            if (request.testInput() != null && !request.testInput().isBlank()) {
+                user.append("【测试输入】\n").append(request.testInput()).append("\n\n");
+            }
+            user.append("【试运行输出】\n").append(request.output()).append("\n\n");
         }
-        user.append("【试运行输出】\n").append(request.output()).append("\n\n");
         user.append("""
                 请以上述材料评审这条提示词的实际效果，严格按以下结构输出（Markdown）：
                 ## 总体判断
